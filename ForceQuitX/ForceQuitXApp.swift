@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import Carbon
+import ServiceManagement
 
 @main
 struct ForceQuitXApp: App {
@@ -127,6 +128,21 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(hotkeyInfo)
         
         menu.addItem(NSMenuItem.separator())
+        
+        // Launch at Login toggle
+        let launchAtLogin = (try? SMAppService.mainApp.status) == .enabled
+        let loginItem = NSMenuItem(
+            title: "Launch at Login",
+            action: #selector(toggleLaunchAtLogin),
+            keyEquivalent: ""
+        )
+        loginItem.state = launchAtLogin ? .on : .off
+        menu.addItem(loginItem)
+        
+        menu.addItem(NSMenuItem.separator())
+        menu.addItem(NSMenuItem(title: "Go to Creator ↗", action: #selector(openCreatorLink), keyEquivalent: ""))
+        
+        menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Quit ForceQuitX", action: #selector(quitSelf), keyEquivalent: "q"))
     }
     
@@ -146,6 +162,22 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         for app in userApps where !app.isTerminated {
             app.forceTerminate()
+        }
+    }
+    
+    @objc func openCreatorLink() {
+        NSWorkspace.shared.open(URL(string: "https://giraybatiturk.com")!)
+    }
+    
+    @objc func toggleLaunchAtLogin() {
+        do {
+            if (try? SMAppService.mainApp.status) == .enabled {
+                try SMAppService.mainApp.unregister()
+            } else {
+                try SMAppService.mainApp.register()
+            }
+        } catch {
+            print("Launch at Login hatası: \(error)")
         }
     }
     
