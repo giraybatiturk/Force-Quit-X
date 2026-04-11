@@ -130,7 +130,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(NSMenuItem.separator())
         
         // Launch at Login toggle
-        let launchAtLogin = (try? SMAppService.mainApp.status) == .enabled
+        let launchAtLogin = SMAppService.mainApp.status == .enabled
         let loginItem = NSMenuItem(
             title: "Launch at Login",
             action: #selector(toggleLaunchAtLogin),
@@ -171,7 +171,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     
     @objc func toggleLaunchAtLogin() {
         do {
-            if (try? SMAppService.mainApp.status) == .enabled {
+            if SMAppService.mainApp.status == .enabled {
                 try SMAppService.mainApp.unregister()
             } else {
                 try SMAppService.mainApp.register()
