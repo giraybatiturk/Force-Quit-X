@@ -20,10 +20,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var eventHandlerRef: EventHandlerRef?
     
     func applicationDidFinishLaunching(_ notification: Notification) {
+        NSApp.setActivationPolicy(.accessory)
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         
         if let button = statusItem.button {
-            button.image = NSImage(systemSymbolName: "stop.circle.fill", accessibilityDescription: "ForceQuitX")
+            button.image = NSImage(systemSymbolName: "xmark.circle.fill", accessibilityDescription: "ForceQuitX")
         }
         
         let menu = NSMenu()
@@ -81,7 +82,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         
         let selfBundleID = Bundle.main.bundleIdentifier
         
-        // Çalışan kullanıcı uygulamalarını al (Finder ve kendisi hariç)
         let userApps = NSWorkspace.shared.runningApplications
             .filter { app in
                 app.activationPolicy == .regular &&
@@ -91,45 +91,75 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
             .sorted { $0.localizedName! < $1.localizedName! }
         
-        // Quit All User Apps butonu
-        let quitAllItem = NSMenuItem(
-            title: "⚡ Quit All User Apps (\(userApps.count))",
-            action: userApps.isEmpty ? nil : #selector(quitAllApps),
-            keyEquivalent: ""
+        // — App header —
+        let headerItem = NSMenuItem()
+        headerItem.attributedTitle = NSAttributedString(
+            string: "ForceQuitX",
+            attributes: [
+                .font: NSFont.boldSystemFont(ofSize: 13),
+                .foregroundColor: NSColor.labelColor
+            ]
         )
-        menu.addItem(quitAllItem)
+        headerItem.isEnabled = false
+        menu.addItem(headerItem)
+        
         menu.addItem(NSMenuItem.separator())
         
-        if userApps.isEmpty {
-            let emptyItem = NSMenuItem(title: "No running apps", action: nil, keyEquivalent: "")
-            emptyItem.isEnabled = false
-            menu.addItem(emptyItem)
-        } else {
-            for app in userApps {
-                let menuItem = NSMenuItem(
-                    title: "✕  \(app.localizedName!)",
-                    action: #selector(forceQuitApp(_:)),
-                    keyEquivalent: ""
-                )
-                menuItem.representedObject = app
-                if let icon = app.icon {
-                    icon.size = NSSize(width: 16, height: 16)
-                    menuItem.image = icon
-                }
-                menu.addItem(menuItem)
+        // — Force Quit All —
+        let quitAllItem = NSMenuItem(
+            title: "Force Quit All\(userApps.isEmpty ? "" : " (\(userApps.count) apps)")",
+            action: userApps.isEmpty ? nil : #selector(quitAllApps),
+            keyEquivalent: "q"
+        )
+        quitAllItem.keyEquivalentModifierMask = [.command, .option]
+        menu.addItem(quitAllItem)
+        
+        menu.addItem(NSMenuItem.separator())
+        
+        // — Running apps section title —
+        let sectionItem = NSMenuItem()
+        sectionItem.attributedTitle = NSAttributedString(
+            string: userApps.isEmpty ? "NO RUNNING APPS" : "RUNNING APPS",
+            attributes: [
+                .font: NSFont.systemFont(ofSize: 10, weight: .semibold),
+                .foregroundColor: NSColor.secondaryLabelColor
+            ]
+        )
+        sectionItem.isEnabled = false
+        menu.addItem(sectionItem)
+        
+        // — App list —
+        for app in userApps {
+            let menuItem = NSMenuItem(
+                title: app.localizedName!,
+                action: #selector(forceQuitApp(_:)),
+                keyEquivalent: ""
+            )
+            menuItem.representedObject = app
+            
+            let attrTitle = NSMutableAttributedString(
+                string: app.localizedName! + "\n",
+                attributes: [.font: NSFont.systemFont(ofSize: 13)]
+            )
+            attrTitle.append(NSAttributedString(
+                string: "Force Quit",
+                attributes: [
+                    .font: NSFont.systemFont(ofSize: 10),
+                    .foregroundColor: NSColor.secondaryLabelColor
+                ]
+            ))
+            menuItem.attributedTitle = attrTitle
+            
+            if let icon = app.icon {
+                icon.size = NSSize(width: 18, height: 18)
+                menuItem.image = icon
             }
+            menu.addItem(menuItem)
         }
         
         menu.addItem(NSMenuItem.separator())
         
-        // ⌘⌥Q kısayolunu tooltip olarak göster
-        let hotkeyInfo = NSMenuItem(title: "⌘⌥Q → Quit All User Apps", action: nil, keyEquivalent: "")
-        hotkeyInfo.isEnabled = false
-        menu.addItem(hotkeyInfo)
-        
-        menu.addItem(NSMenuItem.separator())
-        
-        // Launch at Login toggle
+        // — Settings —
         let launchAtLogin = SMAppService.mainApp.status == .enabled
         let loginItem = NSMenuItem(
             title: "Launch at Login",
@@ -139,7 +169,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         loginItem.state = launchAtLogin ? .on : .off
         menu.addItem(loginItem)
         
-        menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Go to Creator ↗", action: #selector(openCreatorLink), keyEquivalent: ""))
         
         menu.addItem(NSMenuItem.separator())
