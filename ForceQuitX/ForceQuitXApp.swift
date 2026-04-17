@@ -18,6 +18,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var statusItem: NSStatusItem!
     var hotKeyRef: EventHotKeyRef?
     var eventHandlerRef: EventHandlerRef?
+    var latestVersion: String?
     
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -32,6 +33,25 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         statusItem.menu = menu
         
         registerGlobalHotKey()
+        checkForUpdates()
+    }
+    
+    func checkForUpdates() {
+        guard let url = URL(string: "https://api.github.com/repos/giraybatiturk/Force-Quit-X/releases/latest") else { return }
+        URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
+            guard let data = data,
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let tagName = json["tag_name"] as? String else { return }
+            let latest = tagName.trimmingCharacters(in: CharacterSet(charactersIn: "v"))
+            let current = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
+            if latest.compare(current, options: .numeric) == .orderedDescending {
+                DispatchQueue.main.async { self?.latestVersion = latest }
+            }
+        }.resume()
+    }
+    
+    @objc func openReleasesPage() {
+        NSWorkspace.shared.open(URL(string: "https://github.com/giraybatiturk/Force-Quit-X/releases/latest")!)
     }
     
     func registerGlobalHotKey() {
@@ -102,6 +122,23 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         )
         headerItem.isEnabled = false
         menu.addItem(headerItem)
+        
+        // — Update available —
+        if let latest = latestVersion {
+            let updateItem = NSMenuItem(
+                title: "Update Available (v\(latest)) ↗",
+                action: #selector(openReleasesPage),
+                keyEquivalent: ""
+            )
+            updateItem.attributedTitle = NSAttributedString(
+                string: "⬆ Update Available  v\(latest)",
+                attributes: [
+                    .font: NSFont.systemFont(ofSize: 12, weight: .medium),
+                    .foregroundColor: NSColor.systemOrange
+                ]
+            )
+            menu.addItem(updateItem)
+        }
         
         menu.addItem(NSMenuItem.separator())
         
