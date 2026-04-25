@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(xcrun swift-format *)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.file_path' | { read -r f; case \"$f\" in *.pbxproj) printf '{\"systemMessage\":\"⚠️  Editing project.pbxproj — fragile file, double-check the diff\"}\\n';; esac; }"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.file_path' | { read -r f; case \"$f\" in *.swift) xcrun swift-format -i \"$f\" 2>/dev/null;; esac; }"
+          }
+        ]
+      }
+    ]
+  }
+}
