@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build (macOS)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show toolchain
+        run: |
+          xcodebuild -version
+          xcrun swift-format --version
+
+      - name: Build
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project ForceQuitX.xcodeproj \
+            -scheme ForceQuitX \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            COMPILER_INDEX_STORE_ENABLE=NO
+
+  lint:
+    name: swift-format lint
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lint
+        run: xcrun swift-format lint --strict --recursive ForceQuitX
