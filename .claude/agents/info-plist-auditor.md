@@ -31,7 +31,7 @@ Check both. If standalone exists, read it. Either way, also grep `project.pbxpro
 - This file recently had `MACOSX_DEPLOYMENT_TARGET = 26.4` (invalid, fixed to `15.0` in commit `50bef28`). Confirm the plist side wasn't left at a different value.
 
 ### 4. Bundle identifier
-- `CFBundleIdentifier` = `com.giraybatiturk.ForceQuitX` (or whatever's in `PRODUCT_BUNDLE_IDENTIFIER`). Must match what notarization and SMAppService expect.
+- `CFBundleIdentifier` = `AGB.ForceQuitX` (or whatever's currently in `PRODUCT_BUNDLE_IDENTIFIER`). Must match what notarization and SMAppService expect — never change it across releases or existing users lose state.
 
 ### 5. Copyright
 - `NSHumanReadableCopyright` should include the current year. If frozen at an old year, flag it. Get current year from `date +%Y`.

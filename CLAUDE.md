@@ -19,7 +19,7 @@ Single source file: `ForceQuitX/ForceQuitXApp.swift` (~295 lines).
 
 - **Carbon hot key lifecycle**: `RegisterEventHotKey` / `InstallEventHandler` results MUST be paired with `UnregisterEventHotKey` / `RemoveEventHandler`. `applicationWillTerminate` does this; `registerGlobalHotKey` re-tears-down before re-registering. Don't add a re-registration path that skips teardown.
 - **Updater contract**: `normalizedVersion()` strips leading `v` and trailing `.0`s, drops prerelease/build suffixes (`1.2.0-beta+sha → 1.2.0`). The GitHub Releases `tag_name` and the bundle's `CFBundleShortVersionString` MUST normalize to comparable forms. If you change one, change the other.
-- **Menubar-only**: `setActivationPolicy(.accessory)` in code; `LSUIElement = true` in Info.plist (or `INFOPLIST_KEY_LSUIElement = YES` in pbxproj). Both are required.
+- **Menubar-only**: `setActivationPolicy(.accessory)` in code; `INFOPLIST_KEY_LSUIElement = YES` in pbxproj (the project uses Xcode-generated Info.plist via `GENERATE_INFOPLIST_FILE = YES`). Both are required — without the build setting the Dock briefly flickers on launch.
 - **No force-unwraps on Cocoa optionals** — `NSRunningApplication.localizedName` can be nil; use `compactMap`. `URL(string:)` can be nil; guard it.
 
 ## Style
