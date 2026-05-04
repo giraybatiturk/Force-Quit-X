@@ -9,3 +9,7 @@ DerivedData/
 
 # Claude Code
 .claude/settings.local.json
+.claude/skills/
+
+# Build artifacts
+*.dmg

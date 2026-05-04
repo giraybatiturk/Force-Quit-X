@@ -38,7 +38,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
         if let button = statusItem.button {
-            button.image = NSImage(systemSymbolName: "xmark.circle.fill", accessibilityDescription: "ForceQuitX")
+            let icon = NSImage(named: "MenubarIcon")
+            icon?.isTemplate = true
+            icon?.accessibilityDescription = "ForceQuitX"
+            button.image =
+                icon
+                ?? NSImage(systemSymbolName: "xmark.circle.fill", accessibilityDescription: "ForceQuitX")
         }
 
         let menu = NSMenu()
@@ -59,27 +64,44 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         config.timeoutIntervalForResource = 15
         let session = URLSession(configuration: config)
 
-        session.dataTask(with: url) { [weak self] data, _, error in
+        var request = URLRequest(url: url)
+        request.setValue(
+            "ForceQuitX/\(currentVersion) (+https://github.com/giraybatiturk/Force-Quit-X)",
+            forHTTPHeaderField: "User-Agent"
+        )
+
+        session.dataTask(with: request) { [weak self] data, _, error in
             if let error {
                 NSLog("ForceQuitX: update check failed: \(error.localizedDescription)")
                 return
             }
-            guard let data,
+            guard let self, let data,
                 let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                 let tagName = json["tag_name"] as? String
             else { return }
-            let normalizedLatest = self?.normalizedVersion(tagName) ?? tagName
-            let normalizedCurrent = self?.normalizedVersion(currentVersion) ?? currentVersion
+            let normalizedLatest = self.normalizedVersion(tagName)
+            let normalizedCurrent = self.normalizedVersion(currentVersion)
 
-            if normalizedLatest.compare(normalizedCurrent, options: .numeric) == .orderedDescending {
-                DispatchQueue.main.async { self?.latestVersion = normalizedLatest }
-            }
+            guard normalizedLatest.compare(normalizedCurrent, options: .numeric) == .orderedDescending
+            else { return }
+
+            // Honor "Skip This Version" until a newer one ships.
+            let skippedVersion = UserDefaults.standard.string(forKey: "SkippedUpdateVersion")
+            if skippedVersion == normalizedLatest { return }
+
+            DispatchQueue.main.async { self.latestVersion = normalizedLatest }
         }.resume()
     }
 
     @objc func openReleasesPage() {
         guard let url = URL(string: "https://github.com/giraybatiturk/Force-Quit-X/releases/latest") else { return }
         NSWorkspace.shared.open(url)
+    }
+
+    @objc func skipCurrentUpdate() {
+        guard let version = latestVersion else { return }
+        UserDefaults.standard.set(version, forKey: "SkippedUpdateVersion")
+        latestVersion = nil
     }
 
     func registerGlobalHotKey() {
@@ -196,6 +218,21 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 ]
             )
             menu.addItem(updateItem)
+
+            let skipItem = NSMenuItem(
+                title: "Skip This Version",
+                action: #selector(skipCurrentUpdate),
+                keyEquivalent: ""
+            )
+            skipItem.attributedTitle = NSAttributedString(
+                string: "Skip v\(latest)",
+                attributes: [
+                    .font: NSFont.systemFont(ofSize: 11),
+                    .foregroundColor: NSColor.secondaryLabelColor,
+                ]
+            )
+            skipItem.indentationLevel = 1
+            menu.addItem(skipItem)
         }
 
         menu.addItem(NSMenuItem.separator())
@@ -209,6 +246,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             keyEquivalent: ""
         )
         menu.addItem(quitAllItem)
+
+        let frontmostBundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        let exceptFrontmostCount = userApps.filter { $0.app.bundleIdentifier != frontmostBundleID }.count
+        let quitExceptFrontmostItem = NSMenuItem(
+            title:
+                "Force Quit All Except Frontmost\(exceptFrontmostCount > 0 ? " (\(exceptFrontmostCount) apps)" : "")",
+            action: exceptFrontmostCount > 0 ? #selector(quitAllAppsExceptFrontmost) : nil,
+            keyEquivalent: ""
+        )
+        menu.addItem(quitExceptFrontmostItem)
 
         menu.addItem(NSMenuItem.separator())
 
@@ -280,10 +327,66 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc func quitAllApps() {
+        guard
+            confirmForceQuitAll(
+                messageText: "Force Quit All Running Apps?",
+                informativeText:
+                    "This will immediately terminate all running apps without saving. Any unsaved work will be lost."
+            )
+        else { return }
+        performQuitAllApps(excluding: nil)
+    }
+
+    @objc func quitAllAppsExceptFrontmost() {
+        // Capture the frontmost app BEFORE showing the modal — activating ForceQuitX
+        // for the alert would otherwise make ForceQuitX itself the frontmost.
+        let frontmostBundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+
+        guard
+            confirmForceQuitAll(
+                messageText: "Force Quit All Apps Except the Frontmost?",
+                informativeText:
+                    "This will immediately terminate all running apps except the one currently in front. Any unsaved work in those apps will be lost."
+            )
+        else { return }
+        performQuitAllApps(excluding: frontmostBundleID)
+    }
+
+    private func confirmForceQuitAll(messageText: String, informativeText: String) -> Bool {
+        let defaults = UserDefaults.standard
+        let suppressKey = "ForceQuitAllConfirmedV1"
+        if defaults.bool(forKey: suppressKey) { return true }
+
+        NSApp.activate(ignoringOtherApps: true)
+
+        let alert = NSAlert()
+        alert.messageText = messageText
+        alert.informativeText = informativeText
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Force Quit")
+        alert.addButton(withTitle: "Cancel")
+
+        let suppress = NSButton(checkboxWithTitle: "Don't ask again", target: nil, action: nil)
+        suppress.state = .off
+        alert.accessoryView = suppress
+
+        // Make Cancel the Enter-key default so accidental Enter presses don't quit everything.
+        alert.buttons[0].keyEquivalent = ""
+        alert.buttons[1].keyEquivalent = "\r"
+
+        guard alert.runModal() == .alertFirstButtonReturn else { return false }
+        if suppress.state == .on {
+            defaults.set(true, forKey: suppressKey)
+        }
+        return true
+    }
+
+    private func performQuitAllApps(excluding excludedBundleID: String?) {
         let selfBundleID = Bundle.main.bundleIdentifier
         let userApps = NSWorkspace.shared.runningApplications.filter { app in
             app.activationPolicy == .regular && app.bundleIdentifier != "com.apple.finder"
                 && app.bundleIdentifier != selfBundleID
+                && app.bundleIdentifier != excludedBundleID
         }
         for app in userApps where !app.isTerminated {
             app.forceTerminate()
