@@ -4,20 +4,28 @@ A macOS menu-bar utility. Single click to force-quit any running app; **⌘⌥Q*
 
 ## Architecture
 
-Single source file: `ForceQuitX/ForceQuitXApp.swift` (~295 lines).
+Multi-file layout under `ForceQuitX/ForceQuitX/`:
 
-- **`ForceQuitXApp`** (SwiftUI `App`) — empty `Settings` scene; everything lives in `AppDelegate` via `@NSApplicationDelegateAdaptor`.
-- **`AppDelegate`** — owns:
-  - `NSStatusItem` (the menubar icon)
-  - Carbon `EventHotKeyRef` + `EventHandlerRef` for the global ⌘⌥Q hotkey
-  - `URLSession` calls to GitHub Releases for the in-app update check
-  - `SMAppService.mainApp` toggle for launch-at-login
+| File | Purpose |
+|------|---------|
+| `ForceQuitXApp.swift` | `@main` SwiftUI App struct with `@NSApplicationDelegateAdaptor` — nothing else |
+| `AppDelegate.swift` | Core lifecycle, menu building, all `@objc` actions, feature integration |
+| `Preferences.swift` | Centralized `UserDefaults` keys and typed accessors |
+| `HotKeyManager.swift` | Carbon `RegisterEventHotKey`/`InstallEventHandler` lifecycle, customizable shortcut binding, key-code-to-string display |
+| `KeyRecorderPanel.swift` | Floating `NSPanel` for capturing a new global shortcut |
+| `AutoQuitManager.swift` | Timer-based idle-app tracking via `NSWorkspace.didActivateApplicationNotification`; graceful or force terminate |
+| `BackgroundAppProvider.swift` | Enumerates `.accessory`/`.prohibited` processes, hides critical `com.apple.*` agents |
+| `ContentView.swift` | Unused at runtime (legacy template) |
 
-`ContentView.swift` exists but isn't used at runtime — the app sets `NSApp.setActivationPolicy(.accessory)` so no window ever shows.
+- **`AppDelegate`** — owns `NSStatusItem`, delegates hotkey to `HotKeyManager`, delegates idle-quit to `AutoQuitManager`.
+- **`HotKeyManager`** — encapsulates all Carbon API calls; `AppDelegate` conforms to `HotKeyDelegate`.
+- **`AutoQuitManager`** — independent state machine with its own `Timer` + workspace observer.
+- **`Preferences`** — single source of truth for all `UserDefaults` keys.
 
 ## Invariants — don't break these
 
-- **Carbon hot key lifecycle**: `RegisterEventHotKey` / `InstallEventHandler` results MUST be paired with `UnregisterEventHotKey` / `RemoveEventHandler`. `applicationWillTerminate` does this; `registerGlobalHotKey` re-tears-down before re-registering. Don't add a re-registration path that skips teardown.
+- **Carbon hot key lifecycle**: `RegisterEventHotKey` / `InstallEventHandler` results MUST be paired with `UnregisterEventHotKey` / `RemoveEventHandler`. `HotKeyManager.unregister()` does teardown; `register()` calls `unregister()` first; `updateBinding()` calls `unregister()` before `register()`. `applicationWillTerminate` calls `hotKeyManager.unregister()`. Don't add a registration path that skips teardown.
+- **AutoQuitManager timer lifecycle**: `start()` calls `stop()` first (idempotent). `stop()` invalidates the timer and removes the workspace observer. `applicationWillTerminate` calls `autoQuitManager.stop()`.
 - **Updater contract**: `normalizedVersion()` strips leading `v` and trailing `.0`s, drops prerelease/build suffixes (`1.2.0-beta+sha → 1.2.0`). The GitHub Releases `tag_name` and the bundle's `CFBundleShortVersionString` MUST normalize to comparable forms. If you change one, change the other.
 - **Menubar-only**: `setActivationPolicy(.accessory)` in code; `INFOPLIST_KEY_LSUIElement = YES` in pbxproj (the project uses Xcode-generated Info.plist via `GENERATE_INFOPLIST_FILE = YES`). Both are required — without the build setting the Dock briefly flickers on launch.
 - **No force-unwraps on Cocoa optionals** — `NSRunningApplication.localizedName` can be nil; use `compactMap`. `URL(string:)` can be nil; guard it.
@@ -50,9 +58,25 @@ After release, the `changelog-writer` subagent drafts user-facing release notes 
 
 Both jobs run on `macos-15`.
 
+## UserDefaults Keys
+
+| Key | Type | Default | Feature |
+|-----|------|---------|---------|
+| `SkippedUpdateVersion` | String? | nil | Update checker |
+| `ForceQuitAllConfirmedV1` | Bool | false | Force-quit-all confirmation suppress |
+| `AutoQuitEnabled` | Bool | false | Auto Quit |
+| `AutoQuitTimeoutMinutes` | Int | 30 | Auto Quit |
+| `AutoQuitExcludedBundleIDs` | [String] | [] | Auto Quit |
+| `AutoQuitUsesForceTerminate` | Bool | false | Auto Quit (graceful vs force) |
+| `ShowBackgroundApps` | Bool | false | Background process visibility |
+| `CustomHotKeyCode` | Int | 0 (=default ⌘⌥Q) | Custom shortcuts |
+| `CustomHotKeyModifiers` | Int | 0 (=default) | Custom shortcuts |
+| `MenuAppearance` | String | "system" | Appearance (system/light/dark) |
+| `IconStyle` | String | "custom" | Menubar icon style |
+
 ## Things that aren't here (yet)
 
-- No tests. `normalizedVersion()` is the only thing pure enough to unit-test cheaply; if you add tests, start there.
+- No tests. `normalizedVersion()` and `BackgroundAppProvider.backgroundApps()` filtering logic are the best candidates for unit tests.
 - No localization. All English strings are hardcoded — wrap in `NSLocalizedString` if localization is ever needed.
 - No crash reporter. Errors go to `NSLog` and (for SMAppService failures) `NSAlert`.
 
