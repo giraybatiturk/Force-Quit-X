@@ -12,7 +12,6 @@ enum Preferences {
     static let autoQuitEnabledKey = "AutoQuitEnabled"
     static let autoQuitTimeoutMinutesKey = "AutoQuitTimeoutMinutes"
     static let autoQuitExcludedBundleIDsKey = "AutoQuitExcludedBundleIDs"
-    static let autoQuitUsesForceTerminateKey = "AutoQuitUsesForceTerminate"
 
     static var autoQuitEnabled: Bool {
         get { UserDefaults.standard.bool(forKey: autoQuitEnabledKey) }
@@ -32,9 +31,13 @@ enum Preferences {
         set { UserDefaults.standard.set(newValue, forKey: autoQuitExcludedBundleIDsKey) }
     }
 
-    static var autoQuitUsesForceTerminate: Bool {
-        get { UserDefaults.standard.bool(forKey: autoQuitUsesForceTerminateKey) }
-        set { UserDefaults.standard.set(newValue, forKey: autoQuitUsesForceTerminateKey) }
+    // MARK: - Launch at Login
+
+    static let launchAtLoginDefaultedKey = "LaunchAtLoginDefaulted"
+
+    static var launchAtLoginDefaulted: Bool {
+        get { UserDefaults.standard.bool(forKey: launchAtLoginDefaultedKey) }
+        set { UserDefaults.standard.set(newValue, forKey: launchAtLoginDefaultedKey) }
     }
 
     // MARK: - Background Apps
@@ -64,15 +67,9 @@ enum Preferences {
     // MARK: - Appearance
 
     static let menuAppearanceKey = "MenuAppearance"
-    static let iconStyleKey = "IconStyle"
 
     static var menuAppearance: String {
         get { UserDefaults.standard.string(forKey: menuAppearanceKey) ?? "system" }
         set { UserDefaults.standard.set(newValue, forKey: menuAppearanceKey) }
-    }
-
-    static var iconStyle: String {
-        get { UserDefaults.standard.string(forKey: iconStyleKey) ?? "custom" }
-        set { UserDefaults.standard.set(newValue, forKey: iconStyleKey) }
     }
 }

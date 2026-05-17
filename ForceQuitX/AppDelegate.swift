@@ -1,12 +1,18 @@
 import AppKit
 import Carbon
 import ServiceManagement
+import SwiftUI
 
 class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var statusItem: NSStatusItem!
     var latestVersion: String?
+    var lastUpdateCheck: Date?
+    var isCheckingForUpdates = false
     var hotKeyManager: HotKeyManager?
     var autoQuitManager: AutoQuitManager?
+
+    private var settingsWindow: NSWindow?
+    private var updateCheckTimer: Timer?
 
     // Track whether we're showing all background apps (not capped at 25)
     private var showAllBackgroundApps = false
@@ -28,7 +34,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+
+        enableLaunchAtLoginIfFirstRun()
 
         applyIconStyle()
 
@@ -45,34 +53,40 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         checkForUpdates()
+        updateCheckTimer = Timer.scheduledTimer(withTimeInterval: 24 * 60 * 60, repeats: true) {
+            [weak self] _ in
+            self?.checkForUpdates()
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         hotKeyManager?.unregister()
         autoQuitManager?.stop()
+        updateCheckTimer?.invalidate()
+        updateCheckTimer = nil
+    }
+
+    private func enableLaunchAtLoginIfFirstRun() {
+        guard !Preferences.launchAtLoginDefaulted else { return }
+        Preferences.launchAtLoginDefaulted = true
+        do {
+            try SMAppService.mainApp.register()
+        } catch {
+            NSLog("ForceQuitX: default Launch at Login register failed: \(error.localizedDescription)")
+        }
     }
 
     // MARK: - Icon Style
 
     func applyIconStyle() {
         guard let button = statusItem.button else { return }
-        switch Preferences.iconStyle {
-        case "sfSymbolX":
-            button.image = NSImage(
-                systemSymbolName: "xmark.circle.fill", accessibilityDescription: "ForceQuitX")
-        case "sfSymbolPower":
-            button.image = NSImage(
-                systemSymbolName: "power", accessibilityDescription: "ForceQuitX")
-        default:
-            let icon = NSImage(named: "MenubarIcon")
-            icon?.isTemplate = true
-            icon?.accessibilityDescription = "ForceQuitX"
-            button.image =
-                icon
-                ?? NSImage(
-                    systemSymbolName: "xmark.circle.fill", accessibilityDescription: "ForceQuitX")
-        }
-        button.image?.isTemplate = true
+        let icon =
+            NSImage(named: "MenubarIcon")
+            ?? NSImage(systemSymbolName: "xmark.circle.fill", accessibilityDescription: "ForceQuitX")
+        icon?.size = NSSize(width: 18, height: 18)
+        icon?.isTemplate = true
+        icon?.accessibilityDescription = "ForceQuitX"
+        button.image = icon
     }
 
     // MARK: - Menu Appearance
@@ -90,10 +104,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // MARK: - Update Check
 
-    func checkForUpdates() {
-        guard let url = URL(string: "https://api.github.com/repos/giraybatiturk/Force-Quit-X/releases/latest"),
+    func checkForUpdates(ignoreSkipped: Bool = false) {
+        guard !isCheckingForUpdates,
+            let url = URL(string: "https://api.github.com/repos/giraybatiturk/Force-Quit-X/releases/latest"),
             let currentVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
         else { return }
+
+        isCheckingForUpdates = true
+        NotificationCenter.default.post(name: .updateCheckStateChanged, object: nil)
 
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 10
@@ -107,11 +125,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         )
 
         session.dataTask(with: request) { [weak self] data, _, error in
+            guard let self else { return }
+
+            DispatchQueue.main.async {
+                self.isCheckingForUpdates = false
+                self.lastUpdateCheck = Date()
+                NotificationCenter.default.post(name: .updateCheckStateChanged, object: nil)
+            }
+
             if let error {
                 NSLog("ForceQuitX: update check failed: \(error.localizedDescription)")
                 return
             }
-            guard let self, let data,
+            guard let data,
                 let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                 let tagName = json["tag_name"] as? String
             else { return }
@@ -119,13 +145,31 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let normalizedCurrent = self.normalizedVersion(currentVersion)
 
             guard normalizedLatest.compare(normalizedCurrent, options: .numeric) == .orderedDescending
-            else { return }
+            else {
+                DispatchQueue.main.async {
+                    if self.latestVersion != nil {
+                        self.latestVersion = nil
+                        NotificationCenter.default.post(name: .updateCheckStateChanged, object: nil)
+                    }
+                }
+                return
+            }
 
-            let skippedVersion = UserDefaults.standard.string(forKey: Preferences.skippedUpdateVersionKey)
-            if skippedVersion == normalizedLatest { return }
+            if !ignoreSkipped {
+                let skippedVersion = UserDefaults.standard.string(
+                    forKey: Preferences.skippedUpdateVersionKey)
+                if skippedVersion == normalizedLatest { return }
+            }
 
-            DispatchQueue.main.async { self.latestVersion = normalizedLatest }
+            DispatchQueue.main.async {
+                self.latestVersion = normalizedLatest
+                NotificationCenter.default.post(name: .updateCheckStateChanged, object: nil)
+            }
         }.resume()
+    }
+
+    @objc func checkForUpdatesAction() {
+        checkForUpdates(ignoreSkipped: true)
     }
 
     // MARK: - NSMenuDelegate
@@ -153,68 +197,61 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
 
-        // — App header —
-        let headerItem = NSMenuItem()
-        headerItem.attributedTitle = NSAttributedString(
-            string: "ForceQuitX",
-            attributes: [
-                .font: NSFont.boldSystemFont(ofSize: 13),
-                .foregroundColor: NSColor.labelColor,
-            ]
-        )
-        headerItem.isEnabled = false
-        menu.addItem(headerItem)
-
-        // — Update available —
+        // — Update banner (if available) —
         if let latest = latestVersion {
             let updateItem = NSMenuItem(
-                title: "Update Available (v\(latest)) ↗",
+                title: "Download Update v\(latest)",
                 action: #selector(openReleasesPage),
                 keyEquivalent: ""
             )
             updateItem.attributedTitle = NSAttributedString(
-                string: "⬆ Update Available  v\(latest)",
+                string: "Update v\(latest) Available",
                 attributes: [
-                    .font: NSFont.systemFont(ofSize: 12, weight: .medium),
+                    .font: NSFont.systemFont(ofSize: 13, weight: .semibold),
                     .foregroundColor: NSColor.systemOrange,
                 ]
             )
+            let badge = NSImage(
+                systemSymbolName: "arrow.down.circle.fill",
+                accessibilityDescription: "Update available")
+            badge?.size = NSSize(width: 16, height: 16)
+            updateItem.image = badge
             menu.addItem(updateItem)
 
             let skipItem = NSMenuItem(
-                title: "Skip This Version",
+                title: "Skip v\(latest)",
                 action: #selector(skipCurrentUpdate),
                 keyEquivalent: ""
             )
-            skipItem.attributedTitle = NSAttributedString(
-                string: "Skip v\(latest)",
-                attributes: [
-                    .font: NSFont.systemFont(ofSize: 11),
-                    .foregroundColor: NSColor.secondaryLabelColor,
-                ]
-            )
             skipItem.indentationLevel = 1
             menu.addItem(skipItem)
+            menu.addItem(NSMenuItem.separator())
         }
-
-        menu.addItem(NSMenuItem.separator())
 
         // — Force Quit All —
         let quitAllItem = NSMenuItem(
-            title: "Force Quit All\(userApps.isEmpty ? "" : " (\(userApps.count) apps)")",
+            title: "Force Quit All\(userApps.isEmpty ? "" : "  (\(userApps.count))")",
             action: userApps.isEmpty ? nil : #selector(quitAllApps),
             keyEquivalent: ""
         )
+        if let img = NSImage(systemSymbolName: "xmark.octagon.fill", accessibilityDescription: nil) {
+            img.size = NSSize(width: 16, height: 16)
+            quitAllItem.image = img
+        }
         menu.addItem(quitAllItem)
 
         let frontmostBundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
         let exceptFrontmostCount = userApps.filter { $0.app.bundleIdentifier != frontmostBundleID }.count
         let quitExceptFrontmostItem = NSMenuItem(
             title:
-                "Force Quit All Except Frontmost\(exceptFrontmostCount > 0 ? " (\(exceptFrontmostCount) apps)" : "")",
+                "Force Quit All Except Frontmost\(exceptFrontmostCount > 0 ? "  (\(exceptFrontmostCount))" : "")",
             action: exceptFrontmostCount > 0 ? #selector(quitAllAppsExceptFrontmost) : nil,
             keyEquivalent: ""
         )
+        if let img = NSImage(systemSymbolName: "xmark.octagon", accessibilityDescription: nil) {
+            img.size = NSSize(width: 16, height: 16)
+            quitExceptFrontmostItem.image = img
+        }
         menu.addItem(quitExceptFrontmostItem)
 
         menu.addItem(NSMenuItem.separator())
@@ -232,27 +269,21 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(sectionItem)
 
         for (app, name) in userApps {
+            let isFrontmost = app.bundleIdentifier == frontmostBundleID
             let menuItem = NSMenuItem(
                 title: name,
                 action: #selector(forceQuitApp(_:)),
                 keyEquivalent: ""
             )
             menuItem.representedObject = app
-
-            let attrTitle = NSMutableAttributedString(
-                string: name + "\n",
-                attributes: [.font: NSFont.systemFont(ofSize: 13)]
-            )
-            attrTitle.append(
-                NSAttributedString(
-                    string: "Force Quit",
+            if isFrontmost {
+                menuItem.attributedTitle = NSAttributedString(
+                    string: name,
                     attributes: [
-                        .font: NSFont.systemFont(ofSize: 10),
-                        .foregroundColor: NSColor.secondaryLabelColor,
+                        .font: NSFont.systemFont(ofSize: 13, weight: .semibold)
                     ]
-                ))
-            menuItem.attributedTitle = attrTitle
-
+                )
+            }
             if let icon = app.icon {
                 icon.size = NSSize(width: 18, height: 18)
                 menuItem.image = icon
@@ -289,7 +320,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     keyEquivalent: ""
                 )
                 menuItem.representedObject = bgApp.app
-
                 menuItem.attributedTitle = NSAttributedString(
                     string: bgApp.name,
                     attributes: [
@@ -297,7 +327,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                         .foregroundColor: NSColor.secondaryLabelColor,
                     ]
                 )
-
                 if let icon = bgApp.app.icon {
                     icon.size = NSSize(width: 16, height: 16)
                     menuItem.image = icon
@@ -328,158 +357,33 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
         }
 
-        // — Auto Quit section —
         menu.addItem(NSMenuItem.separator())
-        buildAutoQuitSection(menu)
-
-        menu.addItem(NSMenuItem.separator())
-
-        // — Settings —
-        let launchAtLogin = SMAppService.mainApp.status == .enabled
-        let loginItem = NSMenuItem(
-            title: "Launch at Login",
-            action: #selector(toggleLaunchAtLogin),
-            keyEquivalent: ""
-        )
-        loginItem.state = launchAtLogin ? .on : .off
-        menu.addItem(loginItem)
-
-        let bgToggle = NSMenuItem(
-            title: "Show Background Processes",
-            action: #selector(toggleShowBackgroundApps),
-            keyEquivalent: ""
-        )
-        bgToggle.state = Preferences.showBackgroundApps ? .on : .off
-        menu.addItem(bgToggle)
-
-        // — Change Shortcut —
-        let shortcutDisplay = hotKeyManager?.displayString() ?? "⌘⌥Q"
-        let shortcutItem = NSMenuItem(
-            title: "Change Shortcut  \(shortcutDisplay)",
-            action: #selector(showKeyRecorder),
-            keyEquivalent: ""
-        )
-        menu.addItem(shortcutItem)
-
-        // — Appearance submenu —
-        let appearanceSubmenu = NSMenu()
-        for (title, value) in [
-            ("System Default", "system"), ("Always Light", "light"), ("Always Dark", "dark"),
-        ] {
-            let item = NSMenuItem(title: title, action: #selector(setMenuAppearance(_:)), keyEquivalent: "")
-            item.representedObject = value
-            item.state = Preferences.menuAppearance == value ? .on : .off
-            appearanceSubmenu.addItem(item)
-        }
-        appearanceSubmenu.addItem(NSMenuItem.separator())
-        for (title, value) in [
-            ("Icon: Custom X", "custom"), ("Icon: Circle X", "sfSymbolX"), ("Icon: Power", "sfSymbolPower"),
-        ] {
-            let item = NSMenuItem(title: title, action: #selector(setIconStyle(_:)), keyEquivalent: "")
-            item.representedObject = value
-            item.state = Preferences.iconStyle == value ? .on : .off
-            appearanceSubmenu.addItem(item)
-        }
-        let appearanceItem = NSMenuItem(title: "Appearance", action: nil, keyEquivalent: "")
-        appearanceItem.submenu = appearanceSubmenu
-        menu.addItem(appearanceItem)
-
         menu.addItem(
-            NSMenuItem(title: "Go to Creator ↗", action: #selector(openCreatorLink), keyEquivalent: ""))
-
+            NSMenuItem(title: "Settings...", action: #selector(showSettingsWindow), keyEquivalent: ","))
         menu.addItem(NSMenuItem.separator())
         menu.addItem(
             NSMenuItem(title: "Quit ForceQuitX", action: #selector(quitSelf), keyEquivalent: "q"))
     }
 
-    // MARK: - Auto Quit Menu Section
-
-    private func buildAutoQuitSection(_ menu: NSMenu) {
-        let autoQuitHeader = NSMenuItem()
-        autoQuitHeader.attributedTitle = NSAttributedString(
-            string: "AUTO QUIT",
-            attributes: [
-                .font: NSFont.systemFont(ofSize: 10, weight: .semibold),
-                .foregroundColor: NSColor.secondaryLabelColor,
-            ]
-        )
-        autoQuitHeader.isEnabled = false
-        menu.addItem(autoQuitHeader)
-
-        let toggleItem = NSMenuItem(
-            title: "Auto Quit Idle Apps",
-            action: #selector(toggleAutoQuit),
-            keyEquivalent: ""
-        )
-        toggleItem.state = Preferences.autoQuitEnabled ? .on : .off
-        menu.addItem(toggleItem)
-
-        // Timeout submenu
-        let timeoutSubmenu = NSMenu()
-        let currentTimeout = Preferences.autoQuitTimeoutMinutes
-        for (label, minutes) in [
-            ("15 minutes", 15), ("30 minutes", 30), ("1 hour", 60), ("2 hours", 120), ("4 hours", 240),
-        ] {
-            let item = NSMenuItem(title: label, action: #selector(setAutoQuitTimeout(_:)), keyEquivalent: "")
-            item.tag = minutes
-            item.state = currentTimeout == minutes ? .on : .off
-            timeoutSubmenu.addItem(item)
-        }
-        let timeoutItem = NSMenuItem(title: "Timeout: \(formatTimeout(currentTimeout))", action: nil, keyEquivalent: "")
-        timeoutItem.submenu = timeoutSubmenu
-        menu.addItem(timeoutItem)
-
-        // Termination mode submenu
-        let terminationSubmenu = NSMenu()
-        let usesForce = Preferences.autoQuitUsesForceTerminate
-        let gracefulItem = NSMenuItem(
-            title: "Graceful (Save Prompt)", action: #selector(setTerminationGraceful), keyEquivalent: "")
-        gracefulItem.state = usesForce ? .off : .on
-        terminationSubmenu.addItem(gracefulItem)
-        let forceItem = NSMenuItem(
-            title: "Force (Immediate)", action: #selector(setTerminationForce), keyEquivalent: "")
-        forceItem.state = usesForce ? .on : .off
-        terminationSubmenu.addItem(forceItem)
-        let terminationItem = NSMenuItem(
-            title: "Termination: \(usesForce ? "Force" : "Graceful")", action: nil, keyEquivalent: "")
-        terminationItem.submenu = terminationSubmenu
-        menu.addItem(terminationItem)
-
-        // Exclude frontmost
-        let excludeItem = NSMenuItem(
-            title: "Exclude Frontmost App",
-            action: Preferences.autoQuitEnabled ? #selector(excludeFrontmostFromAutoQuit) : nil,
-            keyEquivalent: ""
-        )
-        menu.addItem(excludeItem)
-
-        // Clear exclusions
-        let excluded = Preferences.autoQuitExcludedBundleIDs
-        let clearItem = NSMenuItem(
-            title: excluded.isEmpty ? "Clear Exclusions" : "Clear Exclusions (\(excluded.count))",
-            action: excluded.isEmpty ? nil : #selector(clearAutoQuitExclusions),
-            keyEquivalent: ""
-        )
-        menu.addItem(clearItem)
-    }
-
-    private func formatTimeout(_ minutes: Int) -> String {
-        if minutes < 60 { return "\(minutes) minutes" }
-        let hours = minutes / 60
-        return hours == 1 ? "1 hour" : "\(hours) hours"
-    }
-
     // MARK: - Actions: Update
 
     @objc func openReleasesPage() {
-        guard let url = URL(string: "https://github.com/giraybatiturk/Force-Quit-X/releases/latest") else { return }
-        NSWorkspace.shared.open(url)
+        guard let url = URL(string: "https://github.com/giraybatiturk/Force-Quit-X/releases/latest")
+        else { return }
+        let config = NSWorkspace.OpenConfiguration()
+        config.activates = true
+        NSWorkspace.shared.open(url, configuration: config) { _, error in
+            if let error {
+                NSLog("ForceQuitX: open releases page failed: \(error.localizedDescription)")
+            }
+        }
     }
 
     @objc func skipCurrentUpdate() {
         guard let version = latestVersion else { return }
         UserDefaults.standard.set(version, forKey: Preferences.skippedUpdateVersionKey)
         latestVersion = nil
+        NotificationCenter.default.post(name: .updateCheckStateChanged, object: nil)
     }
 
     // MARK: - Actions: Force Quit
@@ -567,16 +471,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         autoQuitManager?.timeoutMinutes = sender.tag
     }
 
-    @objc func setTerminationGraceful() {
-        Preferences.autoQuitUsesForceTerminate = false
-        autoQuitManager?.usesForceTerminate = false
-    }
-
-    @objc func setTerminationForce() {
-        Preferences.autoQuitUsesForceTerminate = true
-        autoQuitManager?.usesForceTerminate = true
-    }
-
     @objc func excludeFrontmostFromAutoQuit() {
         guard let bundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier else { return }
         var excluded = Preferences.autoQuitExcludedBundleIDs
@@ -608,12 +502,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc func setMenuAppearance(_ sender: NSMenuItem) {
         guard let value = sender.representedObject as? String else { return }
         Preferences.menuAppearance = value
-    }
-
-    @objc func setIconStyle(_ sender: NSMenuItem) {
-        guard let value = sender.representedObject as? String else { return }
-        Preferences.iconStyle = value
-        applyIconStyle()
     }
 
     // MARK: - Actions: Shortcut
@@ -653,6 +541,23 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
+    // MARK: - Settings Window
+
+    @objc func showSettingsWindow() {
+        if settingsWindow == nil {
+            let hostingController = NSHostingController(rootView: SettingsWindow())
+            let window = NSWindow(contentViewController: hostingController)
+            window.title = "ForceQuitX Settings"
+            window.styleMask = [.titled, .closable, .miniaturizable]
+            window.setFrameAutosaveName("ForceQuitXSettings")
+            window.center()
+            settingsWindow = window
+        }
+
+        settingsWindow?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
     @objc func quitSelf() {
         NSApplication.shared.terminate(nil)
     }
@@ -664,4 +569,8 @@ extension AppDelegate: HotKeyDelegate {
     func hotKeyTriggered() {
         quitAllApps()
     }
+}
+
+extension Notification.Name {
+    static let updateCheckStateChanged = Notification.Name("UpdateCheckStateChanged")
 }

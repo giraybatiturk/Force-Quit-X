@@ -94,6 +94,22 @@ class HotKeyManager {
         Preferences.customHotKeyCode = Int(keyCode)
         Preferences.customHotKeyModifiers = Int(modifiers)
         register()
+        NotificationCenter.default.post(name: .hotKeyChanged, object: nil)
+    }
+
+    static func savedDisplayString() -> String {
+        let keyCode: UInt32
+        let modifiers: UInt32
+        let savedKeyCode = Preferences.customHotKeyCode
+        let savedModifiers = Preferences.customHotKeyModifiers
+        if savedKeyCode > 0 && savedModifiers > 0 {
+            keyCode = UInt32(savedKeyCode)
+            modifiers = UInt32(savedModifiers)
+        } else {
+            keyCode = UInt32(kVK_ANSI_Q)
+            modifiers = UInt32(cmdKey | optionKey)
+        }
+        return displayString(keyCode: keyCode, modifiers: modifiers)
     }
 
     // MARK: - Display String
@@ -167,4 +183,8 @@ extension NSEvent {
         if modifierFlags.contains(.shift) { carbon |= UInt32(shiftKey) }
         return carbon
     }
+}
+
+extension Notification.Name {
+    static let hotKeyChanged = Notification.Name("HotKeyChanged")
 }

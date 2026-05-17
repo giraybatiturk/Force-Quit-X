@@ -11,5 +11,11 @@ DerivedData/
 .claude/settings.local.json
 .claude/skills/
 
+# Agent tooling
+.agents/
+.codex/
+AGENTS.md
+skills-lock.json
+
 # Build artifacts
 *.dmg

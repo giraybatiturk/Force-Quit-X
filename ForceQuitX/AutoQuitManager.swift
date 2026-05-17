@@ -6,7 +6,6 @@ class AutoQuitManager {
     private var workspaceObserver: NSObjectProtocol?
 
     var timeoutMinutes: Int = Preferences.autoQuitTimeoutMinutes
-    var usesForceTerminate: Bool = Preferences.autoQuitUsesForceTerminate
     var excludedBundleIDs: Set<String> = Set(Preferences.autoQuitExcludedBundleIDs)
 
     var isEnabled: Bool = false {
@@ -39,8 +38,9 @@ class AutoQuitManager {
             object: nil,
             queue: .main
         ) { [weak self] notification in
-            guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey]
-                as? NSRunningApplication,
+            guard
+                let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey]
+                    as? NSRunningApplication,
                 let bundleID = app.bundleIdentifier
             else { return }
             self?.lastActiveTimestamps[bundleID] = Date()
@@ -80,11 +80,7 @@ class AutoQuitManager {
             let lastActive = lastActiveTimestamps[bundleID] ?? now
             if now.timeIntervalSince(lastActive) >= timeout && !app.isTerminated {
                 NSLog("ForceQuitX: Auto-quitting idle app: \(app.localizedName ?? bundleID)")
-                if usesForceTerminate {
-                    app.forceTerminate()
-                } else {
-                    app.terminate()
-                }
+                app.forceTerminate()
                 lastActiveTimestamps.removeValue(forKey: bundleID)
             }
         }
