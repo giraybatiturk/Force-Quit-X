@@ -4,7 +4,7 @@ A macOS menu-bar utility. Single click to force-quit any running app; **⌘⌥Q*
 
 ## Architecture
 
-Multi-file layout under `ForceQuitX/ForceQuitX/`:
+Multi-file layout under `ForceQuitX/`:
 
 | File | Purpose |
 |------|---------|
@@ -13,8 +13,9 @@ Multi-file layout under `ForceQuitX/ForceQuitX/`:
 | `Preferences.swift` | Centralized `UserDefaults` keys and typed accessors |
 | `HotKeyManager.swift` | Carbon `RegisterEventHotKey`/`InstallEventHandler` lifecycle, customizable shortcut binding, key-code-to-string display |
 | `KeyRecorderPanel.swift` | Floating `NSPanel` for capturing a new global shortcut |
-| `AutoQuitManager.swift` | Timer-based idle-app tracking via `NSWorkspace.didActivateApplicationNotification`; graceful or force terminate |
+| `AutoQuitManager.swift` | Timer-based idle-app tracking via `NSWorkspace.didActivateApplicationNotification`; always force-terminates |
 | `BackgroundAppProvider.swift` | Enumerates `.accessory`/`.prohibited` processes, hides critical `com.apple.*` agents |
+| `SettingsWindow.swift` | SwiftUI Settings view hosted in an `NSWindow` — all preferences, exclusion list, update controls |
 | `ContentView.swift` | Unused at runtime (legacy template) |
 
 - **`AppDelegate`** — owns `NSStatusItem`, delegates hotkey to `HotKeyManager`, delegates idle-quit to `AutoQuitManager`.
@@ -67,12 +68,11 @@ Both jobs run on `macos-15`.
 | `AutoQuitEnabled` | Bool | false | Auto Quit |
 | `AutoQuitTimeoutMinutes` | Int | 30 | Auto Quit |
 | `AutoQuitExcludedBundleIDs` | [String] | [] | Auto Quit |
-| `AutoQuitUsesForceTerminate` | Bool | false | Auto Quit (graceful vs force) |
 | `ShowBackgroundApps` | Bool | false | Background process visibility |
 | `CustomHotKeyCode` | Int | 0 (=default ⌘⌥Q) | Custom shortcuts |
 | `CustomHotKeyModifiers` | Int | 0 (=default) | Custom shortcuts |
 | `MenuAppearance` | String | "system" | Appearance (system/light/dark) |
-| `IconStyle` | String | "custom" | Menubar icon style |
+| `LaunchAtLoginDefaulted` | Bool | false | First-run auto-register of Launch at Login |
 
 ## Things that aren't here (yet)
 
