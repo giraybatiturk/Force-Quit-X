@@ -85,3 +85,17 @@ Both jobs run on `macos-15`.
 - Editing `project.pbxproj` triggers a warning hook because the file is fragile — read the diff carefully, especially around `MARKETING_VERSION` and `MACOSX_DEPLOYMENT_TARGET` (the latter was once silently set to `26.4`, an invalid value from an Xcode beta).
 - `swift-format` runs automatically on `.swift` edits via the PostToolUse hook — if you see "M" on a `.swift` file you didn't touch, the formatter likely fixed something.
 - The global hotkey requires the user to have granted accessibility / input monitoring permission on first launch. There's no in-app prompt for this currently.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in the `giraybatiturk/Force-Quit-X` GitHub repo; use the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Uses the canonical `needs-triage` / `needs-info` / `ready-for-agent` / `ready-for-human` / `wontfix` vocabulary. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: one `CONTEXT.md` + `docs/adr/` at the repo root (neither exists yet — created lazily by `/grill-with-docs`). See `docs/agents/domain.md`.
