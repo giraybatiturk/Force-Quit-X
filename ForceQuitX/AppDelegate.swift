@@ -17,19 +17,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // Track whether we're showing all background apps (not capped at 25)
     private var showAllBackgroundApps = false
 
-    func normalizedVersion(_ version: String) -> String {
-        let trimmed = version.trimmingCharacters(in: CharacterSet(charactersIn: "vV"))
-        // Drop any prerelease/build suffix (e.g. "1.2.0-beta.1+sha" -> "1.2.0").
-        let core = trimmed.split(whereSeparator: { $0 == "-" || $0 == "+" }).first.map(String.init) ?? trimmed
-        let numericComponents = core.split(separator: ".").map(String.init)
-            .filter { Int($0) != nil }
-        guard !numericComponents.isEmpty else { return "0" }
-
-        let lastNonZeroIndex = numericComponents.lastIndex { Int($0) != 0 }
-        guard let lastNonZeroIndex else { return "0" }
-        return numericComponents[...lastNonZeroIndex].joined(separator: ".")
-    }
-
     // MARK: - Lifecycle
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -141,10 +128,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                 let tagName = json["tag_name"] as? String
             else { return }
-            let normalizedLatest = self.normalizedVersion(tagName)
-            let normalizedCurrent = self.normalizedVersion(currentVersion)
+            let normalizedLatest = VersionComparator.normalize(tagName)
 
-            guard normalizedLatest.compare(normalizedCurrent, options: .numeric) == .orderedDescending
+            guard VersionComparator.isNewer(tagName, than: currentVersion)
             else {
                 DispatchQueue.main.async {
                     if self.latestVersion != nil {
