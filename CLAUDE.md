@@ -15,6 +15,7 @@ Multi-file layout under `ForceQuitX/`:
 | `KeyRecorderPanel.swift` | Floating `NSPanel` for capturing a new global shortcut |
 | `AutoQuitManager.swift` | Timer-based idle-app tracking via `NSWorkspace.didActivateApplicationNotification`; always force-terminates |
 | `BackgroundAppProvider.swift` | Enumerates `.accessory`/`.prohibited` processes, hides critical `com.apple.*` agents |
+| `AccessibilityHelper.swift` | First-launch + hotkey-failure NSAlert routing to `Privacy_Accessibility` System Settings pane |
 | `SettingsWindow.swift` | SwiftUI Settings view hosted in an `NSWindow` — all preferences, exclusion list, update controls |
 | `ContentView.swift` | Unused at runtime (legacy template) |
 
@@ -73,6 +74,7 @@ Both jobs run on `macos-15`.
 | `CustomHotKeyModifiers` | Int | 0 (=default) | Custom shortcuts |
 | `MenuAppearance` | String | "system" | Appearance (system/light/dark) |
 | `LaunchAtLoginDefaulted` | Bool | false | First-run auto-register of Launch at Login |
+| `AccessibilityPromptShown` | Bool | false | First-launch Accessibility permission prompt dedup |
 
 ## Things that aren't here (yet)
 
@@ -84,7 +86,7 @@ Both jobs run on `macos-15`.
 
 - Editing `project.pbxproj` triggers a warning hook because the file is fragile — read the diff carefully, especially around `MARKETING_VERSION` and `MACOSX_DEPLOYMENT_TARGET` (the latter was once silently set to `26.4`, an invalid value from an Xcode beta).
 - `swift-format` runs automatically on `.swift` edits via the PostToolUse hook — if you see "M" on a `.swift` file you didn't touch, the formatter likely fixed something.
-- The global hotkey requires the user to have granted accessibility / input monitoring permission on first launch. There's no in-app prompt for this currently.
+- The global hotkey requires the user to have granted accessibility / input monitoring permission on first launch. `AccessibilityHelper` shows an NSAlert on first launch (deduped via `AccessibilityPromptShown`) and any time `HotKeyManager.register()` returns `false`, routing the user to the `Privacy_Accessibility` System Settings pane. The dedup flag is one-shot — re-prompting forever would nag users who deliberately declined.
 
 ## Agent skills
 

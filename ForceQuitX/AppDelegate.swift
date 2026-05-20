@@ -32,7 +32,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         statusItem.menu = menu
 
         hotKeyManager = HotKeyManager(delegate: self)
-        hotKeyManager?.register()
+        let hotKeyRegistered = hotKeyManager?.register() ?? false
+
+        // Surface Accessibility permission once on first launch; if the hot key
+        // outright failed to bind, prompt regardless so the user has a path forward.
+        if !hotKeyRegistered {
+            AccessibilityHelper.notifyHotKeyRegistrationFailed()
+        } else {
+            AccessibilityHelper.promptIfNeededOnFirstLaunch()
+        }
 
         autoQuitManager = AutoQuitManager()
         if Preferences.autoQuitEnabled {
@@ -498,7 +506,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             currentModifiers: hotKeyManager?.modifiers ?? UInt32(cmdKey | optionKey)
         )
         panel.onKeyRecorded = { [weak self] keyCode, modifiers in
-            self?.hotKeyManager?.updateBinding(keyCode: keyCode, modifiers: modifiers)
+            let success = self?.hotKeyManager?.updateBinding(keyCode: keyCode, modifiers: modifiers) ?? false
+            if !success {
+                AccessibilityHelper.notifyHotKeyRegistrationFailed()
+            }
         }
         panel.showRecorder()
     }

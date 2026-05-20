@@ -29,7 +29,8 @@ class HotKeyManager {
 
     // MARK: - Registration
 
-    func register() {
+    @discardableResult
+    func register() -> Bool {
         // Tear down any prior registration so re-entry doesn't leak.
         unregister()
 
@@ -54,7 +55,7 @@ class HotKeyManager {
         )
         guard installStatus == noErr else {
             NSLog("ForceQuitX: InstallEventHandler failed: \(installStatus)")
-            return
+            return false
         }
 
         var hotKeyID = EventHotKeyID()
@@ -71,7 +72,9 @@ class HotKeyManager {
         )
         if regStatus != noErr {
             NSLog("ForceQuitX: RegisterEventHotKey failed: \(regStatus)")
+            return false
         }
+        return true
     }
 
     func unregister() {
@@ -87,14 +90,16 @@ class HotKeyManager {
 
     // MARK: - Update Binding
 
-    func updateBinding(keyCode: UInt32, modifiers: UInt32) {
+    @discardableResult
+    func updateBinding(keyCode: UInt32, modifiers: UInt32) -> Bool {
         unregister()
         self.keyCode = keyCode
         self.modifiers = modifiers
         Preferences.customHotKeyCode = Int(keyCode)
         Preferences.customHotKeyModifiers = Int(modifiers)
-        register()
+        let success = register()
         NotificationCenter.default.post(name: .hotKeyChanged, object: nil)
+        return success
     }
 
     static func savedDisplayString() -> String {
