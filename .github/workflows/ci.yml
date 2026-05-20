@@ -33,10 +33,27 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             COMPILER_INDEX_STORE_ENABLE=NO
 
+  test:
+    name: Test (macOS)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Test
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -project ForceQuitX.xcodeproj \
+            -scheme ForceQuitX \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            COMPILER_INDEX_STORE_ENABLE=NO
+
   lint:
     name: swift-format lint
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
       - name: Lint
-        run: xcrun swift-format lint --strict --recursive ForceQuitX
+        run: xcrun swift-format lint --strict --recursive ForceQuitX ForceQuitXTests

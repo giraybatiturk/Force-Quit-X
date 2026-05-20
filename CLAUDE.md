@@ -76,9 +76,12 @@ Both jobs run on `macos-15`.
 | `LaunchAtLoginDefaulted` | Bool | false | First-run auto-register of Launch at Login |
 | `AccessibilityPromptShown` | Bool | false | First-launch Accessibility permission prompt dedup |
 
+## Tests
+
+An XCTest unit test target (`ForceQuitXTests`) is wired into `ForceQuitX.xcodeproj` and the shared `ForceQuitX` scheme. Run with `xcodebuild test -project ForceQuitX.xcodeproj -scheme ForceQuitX -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO`. CI runs the same invocation. Current coverage: `VersionComparator.normalize`/`isNewer` and `BackgroundAppProvider.shouldInclude` (the extracted-for-testability filter predicate behind `backgroundApps()`).
+
 ## Things that aren't here (yet)
 
-- No tests. `normalizedVersion()` and `BackgroundAppProvider.backgroundApps()` filtering logic are the best candidates for unit tests.
 - No localization. All English strings are hardcoded — wrap in `NSLocalizedString` if localization is ever needed.
 - No crash reporter. Errors go to `NSLog` and (for SMAppService failures) `NSAlert`.
 
