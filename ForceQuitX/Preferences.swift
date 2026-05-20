@@ -72,4 +72,13 @@ enum Preferences {
         get { UserDefaults.standard.string(forKey: menuAppearanceKey) ?? "system" }
         set { UserDefaults.standard.set(newValue, forKey: menuAppearanceKey) }
     }
+
+    // MARK: - Accessibility
+
+    static let accessibilityPromptShownKey = "AccessibilityPromptShown"
+
+    static var accessibilityPromptShown: Bool {
+        get { UserDefaults.standard.bool(forKey: accessibilityPromptShownKey) }
+        set { UserDefaults.standard.set(newValue, forKey: accessibilityPromptShownKey) }
+    }
 }
