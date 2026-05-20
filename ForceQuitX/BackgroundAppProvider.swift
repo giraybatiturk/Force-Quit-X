@@ -9,7 +9,7 @@ struct BackgroundAppInfo {
 enum BackgroundAppProvider {
 
     /// Critical system processes that should never be shown or force-quit.
-    private static let hiddenBundlePrefixes: [String] = [
+    static let hiddenBundlePrefixes: [String] = [
         "com.apple.WindowServer",
         "com.apple.loginwindow",
         "com.apple.dock",
@@ -22,26 +22,45 @@ enum BackgroundAppProvider {
         "com.apple.controlcenter",
     ]
 
+    /// Pure predicate used by `backgroundApps()` — extracted so it can be unit-tested
+    /// without depending on `NSWorkspace.shared.runningApplications`.
+    static func shouldInclude(
+        activationPolicy: NSApplication.ActivationPolicy,
+        bundleIdentifier: String?,
+        localizedName: String?,
+        selfBundleID: String?
+    ) -> Bool {
+        guard activationPolicy == .accessory || activationPolicy == .prohibited,
+            let name = localizedName,
+            !name.isEmpty,
+            bundleIdentifier != selfBundleID
+        else { return false }
+
+        if let bundleID = bundleIdentifier {
+            for prefix in hiddenBundlePrefixes {
+                if bundleID == prefix || bundleID.hasPrefix(prefix + ".") {
+                    return false
+                }
+            }
+        }
+
+        return true
+    }
+
     static func backgroundApps() -> [BackgroundAppInfo] {
         let selfBundleID = Bundle.main.bundleIdentifier
         return NSWorkspace.shared.runningApplications
             .compactMap { app -> BackgroundAppInfo? in
-                guard app.activationPolicy == .accessory || app.activationPolicy == .prohibited,
-                    let name = app.localizedName,
-                    !name.isEmpty,
-                    app.bundleIdentifier != selfBundleID
+                guard
+                    shouldInclude(
+                        activationPolicy: app.activationPolicy,
+                        bundleIdentifier: app.bundleIdentifier,
+                        localizedName: app.localizedName,
+                        selfBundleID: selfBundleID
+                    )
                 else { return nil }
 
-                // Hide critical system processes
-                if let bundleID = app.bundleIdentifier {
-                    for prefix in hiddenBundlePrefixes {
-                        if bundleID == prefix || bundleID.hasPrefix(prefix + ".") {
-                            return nil
-                        }
-                    }
-                }
-
-                return BackgroundAppInfo(app: app, name: name, bundleID: app.bundleIdentifier)
+                return BackgroundAppInfo(app: app, name: app.localizedName ?? "", bundleID: app.bundleIdentifier)
             }
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
