@@ -77,7 +77,16 @@ class AutoQuitManager {
                 !excludedBundleIDs.contains(bundleID)
             else { continue }
 
-            let lastActive = lastActiveTimestamps[bundleID] ?? now
+            // First time we've seen this app — seed it so the idle window starts now.
+            // Without this, an app launched after start() that's never activated would
+            // keep getting a fresh "now" baseline and never reach the timeout.
+            let lastActive: Date
+            if let recorded = lastActiveTimestamps[bundleID] {
+                lastActive = recorded
+            } else {
+                lastActiveTimestamps[bundleID] = now
+                continue
+            }
             if now.timeIntervalSince(lastActive) >= timeout && !app.isTerminated {
                 NSLog("ForceQuitX: Auto-quitting idle app: \(app.localizedName ?? bundleID)")
                 app.forceTerminate()
