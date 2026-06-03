@@ -72,6 +72,10 @@ class HotKeyManager {
         )
         if regStatus != noErr {
             NSLog("ForceQuitX: RegisterEventHotKey failed: \(regStatus)")
+            if let e = eventHandlerRef {
+                RemoveEventHandler(e)
+                eventHandlerRef = nil
+            }
             return false
         }
         return true
