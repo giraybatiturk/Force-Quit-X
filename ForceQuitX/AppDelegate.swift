@@ -453,49 +453,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    // MARK: - Actions: Auto Quit
-
-    @objc func toggleAutoQuit() {
-        Preferences.autoQuitEnabled.toggle()
-        autoQuitManager?.isEnabled = Preferences.autoQuitEnabled
-    }
-
-    @objc func setAutoQuitTimeout(_ sender: NSMenuItem) {
-        Preferences.autoQuitTimeoutMinutes = sender.tag
-        autoQuitManager?.timeoutMinutes = sender.tag
-    }
-
-    @objc func excludeFrontmostFromAutoQuit() {
-        guard let bundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier else { return }
-        var excluded = Preferences.autoQuitExcludedBundleIDs
-        if !excluded.contains(bundleID) {
-            excluded.append(bundleID)
-            Preferences.autoQuitExcludedBundleIDs = excluded
-            autoQuitManager?.excludedBundleIDs = Set(excluded)
-        }
-    }
-
-    @objc func clearAutoQuitExclusions() {
-        Preferences.autoQuitExcludedBundleIDs = []
-        autoQuitManager?.excludedBundleIDs = []
-    }
-
     // MARK: - Actions: Background Apps
-
-    @objc func toggleShowBackgroundApps() {
-        Preferences.showBackgroundApps.toggle()
-        showAllBackgroundApps = false
-    }
 
     @objc func toggleShowAllBackgroundApps() {
         showAllBackgroundApps.toggle()
-    }
-
-    // MARK: - Actions: Appearance
-
-    @objc func setMenuAppearance(_ sender: NSMenuItem) {
-        guard let value = sender.representedObject as? String else { return }
-        Preferences.menuAppearance = value
     }
 
     // MARK: - Actions: Shortcut
@@ -512,30 +473,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
         }
         panel.showRecorder()
-    }
-
-    // MARK: - Actions: General
-
-    @objc func openCreatorLink() {
-        guard let url = URL(string: "https://giraybatiturk.com") else { return }
-        NSWorkspace.shared.open(url)
-    }
-
-    @objc func toggleLaunchAtLogin() {
-        do {
-            if SMAppService.mainApp.status == .enabled {
-                try SMAppService.mainApp.unregister()
-            } else {
-                try SMAppService.mainApp.register()
-            }
-        } catch {
-            NSLog("ForceQuitX: Launch at Login toggle failed: \(error.localizedDescription)")
-            let alert = NSAlert()
-            alert.messageText = "Launch at Login Failed"
-            alert.informativeText = error.localizedDescription
-            alert.alertStyle = .warning
-            alert.runModal()
-        }
     }
 
     // MARK: - Settings Window
