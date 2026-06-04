@@ -4,7 +4,6 @@ enum Preferences {
 
     // MARK: - Existing Keys
 
-    static let skippedUpdateVersionKey = "SkippedUpdateVersion"
     static let forceQuitAllConfirmedKey = "ForceQuitAllConfirmedV1"
 
     // MARK: - Auto Quit

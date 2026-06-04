@@ -9,7 +9,8 @@ Multi-file layout under `ForceQuitX/`:
 | File | Purpose |
 |------|---------|
 | `ForceQuitXApp.swift` | `@main` SwiftUI App struct with `@NSApplicationDelegateAdaptor` — nothing else |
-| `AppDelegate.swift` | Core lifecycle, menu building, all `@objc` actions, feature integration |
+| `AppDelegate.swift` | Core lifecycle, menu building, all `@objc` actions, feature integration, Sparkle updater |
+| `AppMenuItemView.swift` | Custom `NSView` menu row — app icon + name + per-row force-quit (✕) button; row body is inert |
 | `Preferences.swift` | Centralized `UserDefaults` keys and typed accessors |
 | `HotKeyManager.swift` | Carbon `RegisterEventHotKey`/`InstallEventHandler` lifecycle, customizable shortcut binding, key-code-to-string display |
 | `KeyRecorderPanel.swift` | Floating `NSPanel` for capturing a new global shortcut |
@@ -28,7 +29,7 @@ Multi-file layout under `ForceQuitX/`:
 
 - **Carbon hot key lifecycle**: `RegisterEventHotKey` / `InstallEventHandler` results MUST be paired with `UnregisterEventHotKey` / `RemoveEventHandler`. `HotKeyManager.unregister()` does teardown; `register()` calls `unregister()` first; `updateBinding()` calls `unregister()` before `register()`. `applicationWillTerminate` calls `hotKeyManager.unregister()`. Don't add a registration path that skips teardown.
 - **AutoQuitManager timer lifecycle**: `start()` calls `stop()` first (idempotent). `stop()` invalidates the timer and removes the workspace observer. `applicationWillTerminate` calls `autoQuitManager.stop()`.
-- **Updater contract**: `normalizedVersion()` strips leading `v` and trailing `.0`s, drops prerelease/build suffixes (`1.2.0-beta+sha → 1.2.0`). The GitHub Releases `tag_name` and the bundle's `CFBundleShortVersionString` MUST normalize to comparable forms. If you change one, change the other.
+- **Updater contract (Sparkle)**: updates are delivered by [Sparkle](https://sparkle-project.org). The app reads `appcast.xml` (hosted at `raw.githubusercontent.com/giraybatiturk/Force-Quit-X/main/appcast.xml`, set as `SUFeedURL` in `Info.plist`). Each release's DMG is signed with the EdDSA private key (in the maintainer's login Keychain) and verified against `SUPublicEDKey` in `Info.plist`. The appcast `<item>` `sparkle:version` MUST equal the build's `CURRENT_PROJECT_VERSION` (CFBundleVersion) and MUST increase every release, or Sparkle won't offer the update. The seed `Info.plist` (project root) carries the Sparkle keys; `GENERATE_INFOPLIST_FILE = YES` merges the generated keys (LSUIElement, version) on top — both are required.
 - **Menubar-only**: `setActivationPolicy(.accessory)` in code; `INFOPLIST_KEY_LSUIElement = YES` in pbxproj (the project uses Xcode-generated Info.plist via `GENERATE_INFOPLIST_FILE = YES`). Both are required — without the build setting the Dock briefly flickers on launch.
 - **No force-unwraps on Cocoa optionals** — `NSRunningApplication.localizedName` can be nil; use `compactMap`. `URL(string:)` can be nil; guard it.
 
@@ -42,11 +43,12 @@ Multi-file layout under `ForceQuitX/`:
 
 The `release-cut` skill (`/release-cut <version>`) does the full sequence:
 
-1. Bump `MARKETING_VERSION` in `project.pbxproj`
+1. Bump `MARKETING_VERSION` **and** `CURRENT_PROJECT_VERSION` (the latter feeds Sparkle's `sparkle:version` and must increase every release) in `project.pbxproj`
 2. Commit, tag (`v<version>`), `xcodebuild archive`, export, sign, notarize
 3. Build DMG via `hdiutil`
-4. `git push` + `gh release create` with the DMG attached
-5. Verify the new tag is what the auto-updater will see
+4. `sign_update <dmg>` (Sparkle EdDSA) → append an `<item>` to `appcast.xml`, commit it
+5. `git push` (incl. `appcast.xml`) + `gh release create` with the DMG attached
+6. Verify the published `appcast.xml` (raw URL) lists the new `<item>` with a higher `sparkle:version` — that's what every existing user's Sparkle reads
 
 Before tagging, run the `release-readiness` subagent (version/signing sanity) and `info-plist-auditor` (Info.plist consistency).
 
@@ -64,7 +66,6 @@ Both jobs run on `macos-15`.
 
 | Key | Type | Default | Feature |
 |-----|------|---------|---------|
-| `SkippedUpdateVersion` | String? | nil | Update checker |
 | `ForceQuitAllConfirmedV1` | Bool | false | Force-quit-all confirmation suppress |
 | `AutoQuitEnabled` | Bool | false | Auto Quit |
 | `AutoQuitTimeoutMinutes` | Int | 30 | Auto Quit |
@@ -78,7 +79,7 @@ Both jobs run on `macos-15`.
 
 ## Tests
 
-An XCTest unit test target (`ForceQuitXTests`) is wired into `ForceQuitX.xcodeproj` and the shared `ForceQuitX` scheme. Run with `xcodebuild test -project ForceQuitX.xcodeproj -scheme ForceQuitX -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO`. CI runs the same invocation. Current coverage: `VersionComparator.normalize`/`isNewer` and `BackgroundAppProvider.shouldInclude` (the extracted-for-testability filter predicate behind `backgroundApps()`).
+An XCTest unit test target (`ForceQuitXTests`) is wired into `ForceQuitX.xcodeproj` and the shared `ForceQuitX` scheme. Run with `xcodebuild test -project ForceQuitX.xcodeproj -scheme ForceQuitX -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO`. CI runs the same invocation. Current coverage: `BackgroundAppProvider.shouldInclude` (the extracted-for-testability filter predicate behind `backgroundApps()`), `AutoQuitManager.isIdleBeyondTimeout` (idle-window math), and `HotKeyManager.displayString` (modifier-glyph formatting). Version comparison now lives in Sparkle, so the former `VersionComparator` tests are gone.
 
 ## Things that aren't here (yet)
 

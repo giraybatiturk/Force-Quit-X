@@ -1,18 +1,27 @@
 import AppKit
 import Carbon
 import ServiceManagement
+import Sparkle
 import SwiftUI
 
-class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
+class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDelegate {
+    /// Reliable handle to the live delegate. `NSApp.delegate as? AppDelegate` can
+    /// return nil under `@NSApplicationDelegateAdaptor`, so views reach the delegate
+    /// through this instead. Set in `applicationDidFinishLaunching`.
+    static private(set) var shared: AppDelegate?
+
     var statusItem: NSStatusItem!
-    var latestVersion: String?
-    var lastUpdateCheck: Date?
-    var isCheckingForUpdates = false
     var hotKeyManager: HotKeyManager?
     var autoQuitManager: AutoQuitManager?
 
+    /// Sparkle auto-updater. Started in `applicationDidFinishLaunching`; the feed
+    /// URL, public key, and check cadence come from Info.plist (SUFeedURL,
+    /// SUPublicEDKey, SUScheduledCheckInterval).
+    private(set) lazy var updaterController = SPUStandardUpdaterController(
+        startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
+
     private var settingsWindow: NSWindow?
-    private var updateCheckTimer: Timer?
+    private var keyRecorderPanel: KeyRecorderPanel?
 
     // Track whether we're showing all background apps (not capped at 25)
     private var showAllBackgroundApps = false
@@ -20,11 +29,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // MARK: - Lifecycle
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        AppDelegate.shared = self
         NSApp.setActivationPolicy(.accessory)
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
 
         enableLaunchAtLoginIfFirstRun()
 
+        applyAppearance()
         applyIconStyle()
 
         let menu = NSMenu()
@@ -47,18 +58,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             autoQuitManager?.isEnabled = true
         }
 
-        checkForUpdates()
-        updateCheckTimer = Timer.scheduledTimer(withTimeInterval: 24 * 60 * 60, repeats: true) {
-            [weak self] _ in
-            self?.checkForUpdates()
-        }
+        // Start Sparkle (scheduled checks run on SUScheduledCheckInterval).
+        _ = updaterController
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         hotKeyManager?.unregister()
         autoQuitManager?.stop()
-        updateCheckTimer?.invalidate()
-        updateCheckTimer = nil
     }
 
     private func enableLaunchAtLoginIfFirstRun() {
@@ -84,92 +90,33 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         button.image = icon
     }
 
-    // MARK: - Menu Appearance
+    // MARK: - Appearance
 
-    private func applyMenuAppearance(_ menu: NSMenu) {
+    /// Applies the saved theme app-wide so the change is visible immediately (the
+    /// open Settings window, the menu next time it opens). A per-menu appearance
+    /// isn't reliably honored for status-bar menus, and isn't visible live anyway.
+    func applyAppearance() {
         switch Preferences.menuAppearance {
         case "light":
-            menu.appearance = NSAppearance(named: .aqua)
+            NSApp.appearance = NSAppearance(named: .aqua)
         case "dark":
-            menu.appearance = NSAppearance(named: .darkAqua)
+            NSApp.appearance = NSAppearance(named: .darkAqua)
         default:
-            menu.appearance = nil
+            NSApp.appearance = nil
         }
-    }
-
-    // MARK: - Update Check
-
-    func checkForUpdates(ignoreSkipped: Bool = false) {
-        guard !isCheckingForUpdates,
-            let url = URL(string: "https://api.github.com/repos/giraybatiturk/Force-Quit-X/releases/latest"),
-            let currentVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
-        else { return }
-
-        isCheckingForUpdates = true
-        NotificationCenter.default.post(name: .updateCheckStateChanged, object: nil)
-
-        let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = 10
-        config.timeoutIntervalForResource = 15
-        let session = URLSession(configuration: config)
-
-        var request = URLRequest(url: url)
-        request.setValue(
-            "ForceQuitX/\(currentVersion) (+https://github.com/giraybatiturk/Force-Quit-X)",
-            forHTTPHeaderField: "User-Agent"
-        )
-
-        session.dataTask(with: request) { [weak self] data, _, error in
-            guard let self else { return }
-
-            DispatchQueue.main.async {
-                self.isCheckingForUpdates = false
-                self.lastUpdateCheck = Date()
-                NotificationCenter.default.post(name: .updateCheckStateChanged, object: nil)
-            }
-
-            if let error {
-                NSLog("ForceQuitX: update check failed: \(error.localizedDescription)")
-                return
-            }
-            guard let data,
-                let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                let tagName = json["tag_name"] as? String
-            else { return }
-            let normalizedLatest = VersionComparator.normalize(tagName)
-
-            guard VersionComparator.isNewer(tagName, than: currentVersion)
-            else {
-                DispatchQueue.main.async {
-                    if self.latestVersion != nil {
-                        self.latestVersion = nil
-                        NotificationCenter.default.post(name: .updateCheckStateChanged, object: nil)
-                    }
-                }
-                return
-            }
-
-            if !ignoreSkipped {
-                let skippedVersion = UserDefaults.standard.string(
-                    forKey: Preferences.skippedUpdateVersionKey)
-                if skippedVersion == normalizedLatest { return }
-            }
-
-            DispatchQueue.main.async {
-                self.latestVersion = normalizedLatest
-                NotificationCenter.default.post(name: .updateCheckStateChanged, object: nil)
-            }
-        }.resume()
-    }
-
-    @objc func checkForUpdatesAction() {
-        checkForUpdates(ignoreSkipped: true)
     }
 
     // MARK: - NSMenuDelegate
 
     func menuWillOpen(_ menu: NSMenu) {
-        applyMenuAppearance(menu)
+        // Best-effort: force the status menu's own appearance to match the theme.
+        // (macOS may still render status-bar menus with the system appearance,
+        // especially on Tahoe — the app windows are themed via NSApp.appearance.)
+        switch Preferences.menuAppearance {
+        case "light": menu.appearance = NSAppearance(named: .aqua)
+        case "dark": menu.appearance = NSAppearance(named: .darkAqua)
+        default: menu.appearance = nil
+        }
         buildMenu(menu)
     }
 
@@ -190,37 +137,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 return (app, name)
             }
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-
-        // — Update banner (if available) —
-        if let latest = latestVersion {
-            let updateItem = NSMenuItem(
-                title: "Download Update v\(latest)",
-                action: #selector(openReleasesPage),
-                keyEquivalent: ""
-            )
-            updateItem.attributedTitle = NSAttributedString(
-                string: "Update v\(latest) Available",
-                attributes: [
-                    .font: NSFont.systemFont(ofSize: 13, weight: .semibold),
-                    .foregroundColor: NSColor.systemOrange,
-                ]
-            )
-            let badge = NSImage(
-                systemSymbolName: "arrow.down.circle.fill",
-                accessibilityDescription: "Update available")
-            badge?.size = NSSize(width: 16, height: 16)
-            updateItem.image = badge
-            menu.addItem(updateItem)
-
-            let skipItem = NSMenuItem(
-                title: "Skip v\(latest)",
-                action: #selector(skipCurrentUpdate),
-                keyEquivalent: ""
-            )
-            skipItem.indentationLevel = 1
-            menu.addItem(skipItem)
-            menu.addItem(NSMenuItem.separator())
-        }
 
         // — Force Quit All —
         let quitAllItem = NSMenuItem(
@@ -264,23 +180,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         for (app, name) in userApps {
             let isFrontmost = app.bundleIdentifier == frontmostBundleID
-            let menuItem = NSMenuItem(
-                title: name,
-                action: #selector(forceQuitApp(_:)),
-                keyEquivalent: ""
-            )
+            let menuItem = NSMenuItem()
             menuItem.representedObject = app
-            if isFrontmost {
-                menuItem.attributedTitle = NSAttributedString(
-                    string: name,
-                    attributes: [
-                        .font: NSFont.systemFont(ofSize: 13, weight: .semibold)
-                    ]
-                )
-            }
-            if let icon = app.icon {
-                icon.size = NSSize(width: 18, height: 18)
-                menuItem.image = icon
+            menuItem.view = AppMenuItemView(
+                icon: app.icon,
+                title: name,
+                isFrontmost: isFrontmost,
+                isBackground: false
+            ) { [weak self] in
+                self?.forceQuit(app)
             }
             menu.addItem(menuItem)
         }
@@ -308,28 +216,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let visibleApps = bgApps.prefix(maxVisible)
 
             for bgApp in visibleApps {
-                let menuItem = NSMenuItem(
+                let app = bgApp.app
+                let icon =
+                    app.icon
+                    ?? NSImage(systemSymbolName: "app.dashed", accessibilityDescription: bgApp.name)
+                let menuItem = NSMenuItem()
+                menuItem.representedObject = app
+                menuItem.view = AppMenuItemView(
+                    icon: icon,
                     title: bgApp.name,
-                    action: #selector(forceQuitApp(_:)),
-                    keyEquivalent: ""
-                )
-                menuItem.representedObject = bgApp.app
-                menuItem.attributedTitle = NSAttributedString(
-                    string: bgApp.name,
-                    attributes: [
-                        .font: NSFont.systemFont(ofSize: 11),
-                        .foregroundColor: NSColor.secondaryLabelColor,
-                    ]
-                )
-                if let icon = bgApp.app.icon {
-                    icon.size = NSSize(width: 16, height: 16)
-                    menuItem.image = icon
-                } else {
-                    let fallback = NSImage(
-                        systemSymbolName: "app.dashed",
-                        accessibilityDescription: bgApp.name)
-                    fallback?.size = NSSize(width: 16, height: 16)
-                    menuItem.image = fallback
+                    isFrontmost: false,
+                    isBackground: true
+                ) { [weak self] in
+                    self?.forceQuit(app)
                 }
                 menu.addItem(menuItem)
             }
@@ -352,6 +251,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         menu.addItem(NSMenuItem.separator())
+        let checkForUpdatesItem = NSMenuItem(
+            title: "Check for Updates...",
+            action: #selector(SPUStandardUpdaterController.checkForUpdates(_:)),
+            keyEquivalent: ""
+        )
+        checkForUpdatesItem.target = updaterController
+        menu.addItem(checkForUpdatesItem)
         menu.addItem(
             NSMenuItem(title: "Settings...", action: #selector(showSettingsWindow), keyEquivalent: ","))
         menu.addItem(NSMenuItem.separator())
@@ -359,31 +265,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             NSMenuItem(title: "Quit ForceQuitX", action: #selector(quitSelf), keyEquivalent: "q"))
     }
 
-    // MARK: - Actions: Update
-
-    @objc func openReleasesPage() {
-        guard let url = URL(string: "https://github.com/giraybatiturk/Force-Quit-X/releases/latest")
-        else { return }
-        let config = NSWorkspace.OpenConfiguration()
-        config.activates = true
-        NSWorkspace.shared.open(url, configuration: config) { _, error in
-            if let error {
-                NSLog("ForceQuitX: open releases page failed: \(error.localizedDescription)")
-            }
-        }
-    }
-
-    @objc func skipCurrentUpdate() {
-        guard let version = latestVersion else { return }
-        UserDefaults.standard.set(version, forKey: Preferences.skippedUpdateVersionKey)
-        latestVersion = nil
-        NotificationCenter.default.post(name: .updateCheckStateChanged, object: nil)
-    }
-
     // MARK: - Actions: Force Quit
 
-    @objc func forceQuitApp(_ sender: NSMenuItem) {
-        guard let app = sender.representedObject as? NSRunningApplication else { return }
+    private func forceQuit(_ app: NSRunningApplication) {
         if !app.isTerminated {
             app.forceTerminate()
         }
@@ -472,6 +356,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 AccessibilityHelper.notifyHotKeyRegistrationFailed()
             }
         }
+        // Hold a strong reference so the panel isn't relying on AppKit's implicit
+        // window retention (the panel sets isReleasedWhenClosed = false). Drop it
+        // when the panel closes so we don't keep a stale window around.
+        panel.onClose = { [weak self] in
+            self?.keyRecorderPanel = nil
+        }
+        keyRecorderPanel = panel
         panel.showRecorder()
     }
 
@@ -484,16 +375,30 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             window.title = "ForceQuitX Settings"
             window.styleMask = [.titled, .closable, .miniaturizable]
             window.setFrameAutosaveName("ForceQuitXSettings")
+            window.delegate = self
             window.center()
             settingsWindow = window
         }
 
+        // Become a regular app while Settings is open so it gets a Dock icon and
+        // shows up in ⌘-Tab — otherwise an accessory app's window is impossible to
+        // resurface once it falls behind another app. Reverted on close.
+        NSApp.setActivationPolicy(.regular)
         settingsWindow?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
 
     @objc func quitSelf() {
         NSApplication.shared.terminate(nil)
+    }
+
+    // MARK: - NSWindowDelegate
+
+    func windowWillClose(_ notification: Notification) {
+        // Drop back to a menubar-only accessory app once Settings closes so the
+        // Dock icon disappears again.
+        guard notification.object as? NSWindow == settingsWindow else { return }
+        NSApp.setActivationPolicy(.accessory)
     }
 }
 
@@ -503,8 +408,4 @@ extension AppDelegate: HotKeyDelegate {
     func hotKeyTriggered() {
         quitAllApps()
     }
-}
-
-extension Notification.Name {
-    static let updateCheckStateChanged = Notification.Name("UpdateCheckStateChanged")
 }

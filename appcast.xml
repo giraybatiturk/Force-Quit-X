@@ -1,0 +1,27 @@
+<?xml version="1.0" standalone="yes"?>
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+    <channel>
+        <title>ForceQuitX</title>
+        <link>https://raw.githubusercontent.com/giraybatiturk/Force-Quit-X/main/appcast.xml</link>
+        <description>Most recent changes for ForceQuitX.</description>
+        <language>en</language>
+
+        <!--
+        release-cut appends one <item> per release. Template:
+
+        <item>
+            <title>v1.1.0</title>
+            <pubDate>Wed, 04 Jun 2026 12:00:00 +0000</pubDate>
+            <sparkle:version>2</sparkle:version>                         <!- CFBundleVersion ->
+            <sparkle:shortVersionString>1.1.0</sparkle:shortVersionString> <!- MARKETING_VERSION ->
+            <sparkle:minimumSystemVersion>15.6</sparkle:minimumSystemVersion>
+            <description><![CDATA[ <ul><li>What changed…</li></ul> ]]></description>
+            <enclosure
+                url="https://github.com/giraybatiturk/Force-Quit-X/releases/download/v1.1.0/ForceQuitX-1.1.0.dmg"
+                sparkle:edSignature="SIGNATURE_FROM_sign_update"
+                length="DMG_BYTES_FROM_sign_update"
+                type="application/octet-stream" />
+        </item>
+        -->
+    </channel>
+</rss>
