@@ -19,3 +19,13 @@ skills-lock.json
 
 # Build artifacts
 *.dmg
+
+# Signing & secrets — never commit
+*.p12
+*.pem
+*-private-key*
+*.privatekey
+*sparkle*private*
+.env
+.env.*
+exportOptions.plist
