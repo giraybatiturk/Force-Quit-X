@@ -1,5 +1,6 @@
 import AppKit
 import ServiceManagement
+import Sparkle
 import SwiftUI
 
 struct ExcludedAppRow: Identifiable {
@@ -19,12 +20,11 @@ struct SettingsWindow: View {
 
     @State private var shortcutDisplay = HotKeyManager.savedDisplayString()
 
-    @State private var latestVersion: String? = (NSApp.delegate as? AppDelegate)?.latestVersion
-    @State private var isCheckingForUpdates: Bool = (NSApp.delegate as? AppDelegate)?.isCheckingForUpdates ?? false
-    @State private var lastUpdateCheck: Date? = (NSApp.delegate as? AppDelegate)?.lastUpdateCheck
+    @State private var automaticallyChecksForUpdates =
+        AppDelegate.shared?.updaterController.updater.automaticallyChecksForUpdates ?? true
 
     private var appDelegate: AppDelegate? {
-        NSApp.delegate as? AppDelegate
+        AppDelegate.shared
     }
 
     private var appVersion: String {
@@ -148,7 +148,7 @@ struct SettingsWindow: View {
                 }
 
                 Section("Appearance") {
-                    Picker("Menu Theme", selection: $menuAppearance) {
+                    Picker("Theme", selection: $menuAppearance) {
                         Text("System").tag("system")
                         Text("Light").tag("light")
                         Text("Dark").tag("dark")
@@ -156,6 +156,7 @@ struct SettingsWindow: View {
                     .pickerStyle(.segmented)
                     .onChange(of: menuAppearance) { _, newValue in
                         Preferences.menuAppearance = newValue
+                        appDelegate?.applyAppearance()
                     }
                 }
 
@@ -176,59 +177,35 @@ struct SettingsWindow: View {
                 }
 
                 Section("Updates") {
+                    Toggle("Automatically check for updates", isOn: $automaticallyChecksForUpdates)
+                        .onChange(of: automaticallyChecksForUpdates) { _, newValue in
+                            appDelegate?.updaterController.updater.automaticallyChecksForUpdates =
+                                newValue
+                        }
+
                     HStack {
-                        if let latest = latestVersion {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Update available — v\(latest)")
-                                    .font(.callout.weight(.semibold))
-                                    .foregroundColor(.orange)
-                                Text("You are on \(appVersion).")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-                            Spacer()
-                            Button("Download") {
-                                Self.openURL("https://github.com/giraybatiturk/Force-Quit-X/releases/latest")
-                            }
-                            .buttonStyle(.borderedProminent)
-                            Button("Skip") {
-                                appDelegate?.skipCurrentUpdate()
-                            }
-                        } else {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("You're up to date")
-                                    .font(.callout)
-                                if let last = lastUpdateCheck {
-                                    Text("Last checked \(Self.relative(from: last))")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                } else {
-                                    Text("Not checked yet")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                            }
-                            Spacer()
-                            Button {
-                                appDelegate?.checkForUpdatesAction()
-                            } label: {
-                                if isCheckingForUpdates {
-                                    HStack(spacing: 6) {
-                                        ProgressView().controlSize(.small)
-                                        Text("Checking...")
-                                    }
-                                } else {
-                                    Text("Check for Updates")
-                                }
-                            }
-                            .disabled(isCheckingForUpdates)
+                        Text("Current version \(appVersion)")
+                            .font(.callout)
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        Button("Check for Updates") {
+                            appDelegate?.updaterController.checkForUpdates(nil)
                         }
                     }
                 }
 
                 Section {
-                    Button("Visit Creator Website ↗") {
-                        Self.openURL("https://giraybatiturk.com")
+                    HStack {
+                        Button("❤️ Support / Tip") {
+                            // TODO: swap for your real tip page (GitHub Sponsors / Ko-fi).
+                            Self.openURL("https://github.com/sponsors/giraybatiturk")
+                        }
+                        .buttonStyle(.borderedProminent)
+                        Spacer()
+                        Button("Visit Creator Website ↗") {
+                            Self.openURL("https://giraybatiturk.com")
+                        }
+                        .buttonStyle(.link)
                     }
                 }
             }
@@ -242,17 +219,6 @@ struct SettingsWindow: View {
         .onReceive(NotificationCenter.default.publisher(for: .hotKeyChanged)) { _ in
             shortcutDisplay = HotKeyManager.savedDisplayString()
         }
-        .onReceive(NotificationCenter.default.publisher(for: .updateCheckStateChanged)) { _ in
-            latestVersion = appDelegate?.latestVersion
-            isCheckingForUpdates = appDelegate?.isCheckingForUpdates ?? false
-            lastUpdateCheck = appDelegate?.lastUpdateCheck
-        }
-    }
-
-    private static func relative(from date: Date) -> String {
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .short
-        return formatter.localizedString(for: date, relativeTo: Date())
     }
 
     static func openURL(_ string: String) {

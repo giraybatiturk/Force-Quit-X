@@ -1,6 +1,6 @@
 ---
 name: release-cut
-description: Cut a new ForceQuitX release — bump MARKETING_VERSION in project.pbxproj, commit, tag, build a notarized DMG, and publish a GitHub Release with auto-generated notes. Invoke as `/release-cut <version>` (e.g. `/release-cut 1.3.0`).
+description: Cut a new ForceQuitX release — bump MARKETING_VERSION + CURRENT_PROJECT_VERSION, commit, tag, build a notarized DMG, sign it for Sparkle and update appcast.xml, then publish a GitHub Release. Invoke as `/release-cut <version>` (e.g. `/release-cut 1.3.0`).
 disable-model-invocation: true
 ---
 
@@ -22,9 +22,10 @@ If any precondition fails, STOP and report — do not partially execute.
 ## Steps
 
 ### 1. Bump version
-- Read current `MARKETING_VERSION` from `ForceQuitX.xcodeproj/project.pbxproj`.
-- Confirm new version > current (string compare with `.numeric` option, same logic as `normalizedVersion()` in the app).
-- Update `MARKETING_VERSION` in `project.pbxproj` (replace_all — there are usually two occurrences for Debug/Release configs).
+- Read current `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` from `ForceQuitX.xcodeproj/project.pbxproj`.
+- Confirm new version > current (string compare with `.numeric` option).
+- Update `MARKETING_VERSION` to the new version (replace_all — two occurrences, Debug/Release).
+- **Also bump `CURRENT_PROJECT_VERSION` by +1** (replace_all). This becomes Sparkle's `sparkle:version` (CFBundleVersion) and MUST increase every release or Sparkle won't offer the update.
 - Show the diff to the user before committing.
 
 ### 2. Commit
@@ -47,15 +48,29 @@ If any precondition fails, STOP and report — do not partially execute.
 ### 6. Build DMG
 - `hdiutil create -volname "ForceQuitX" -srcfolder build/export/ForceQuitX.app -ov -format UDZO build/ForceQuitX-<new-version>.dmg`
 
-### 7. Push and publish
-- Show the user a summary: version, commit SHA, tag, DMG path.
+### 7. Sign for Sparkle & update the appcast
+- Locate the Sparkle `sign_update` tool (installed via SPM):
+  `find ~/Library/Developer/Xcode/DerivedData -name sign_update -path '*sparkle*' | head -1`
+- Run it on the DMG: `<sign_update> build/ForceQuitX-<new-version>.dmg`
+  → prints `sparkle:edSignature="…" length="…"`. (Signs with the EdDSA private key in the login Keychain — if it errors about a missing key, the maintainer must restore/regenerate it.)
+- Append a new `<item>` to `appcast.xml` (project root), filling in:
+  - `<sparkle:version>` = the new `CURRENT_PROJECT_VERSION` (build number)
+  - `<sparkle:shortVersionString>` = `<new-version>` (MARKETING_VERSION)
+  - `<sparkle:minimumSystemVersion>` = `MACOSX_DEPLOYMENT_TARGET`
+  - `<enclosure url=…>` = `https://github.com/giraybatiturk/Force-Quit-X/releases/download/v<new-version>/ForceQuitX-<new-version>.dmg`, plus the `sparkle:edSignature` and `length` from `sign_update`
+  - `<description>` = the release notes (CDATA HTML)
+- `git add appcast.xml` and include it in the release commit (or a follow-up `chore: update appcast` commit).
+
+### 8. Push and publish
+- Show the user a summary: version, build number, commit SHA, tag, DMG path, appcast item.
 - ASK before pushing. Then:
-  - `git push origin main`
+  - `git push origin main` (this publishes `appcast.xml`, which Sparkle reads)
   - `git push origin v<new-version>`
   - `gh release create v<new-version> build/ForceQuitX-<new-version>.dmg --generate-notes --title "ForceQuitX <new-version>"`
+  - The enclosure URL must resolve to the DMG asset just uploaded — verify the filename matches.
 
-### 8. Verify the updater contract
-- After the release is published, hit `https://api.github.com/repos/giraybatiturk/Force-Quit-X/releases/latest` and confirm `tag_name` matches `v<new-version>`. This is what every existing user's app will see.
+### 9. Verify the updater contract
+- Fetch the raw appcast: `curl -s https://raw.githubusercontent.com/giraybatiturk/Force-Quit-X/main/appcast.xml` and confirm the new `<item>` is present with the higher `sparkle:version` and a valid `enclosure` URL/signature. This is what every existing user's Sparkle reads (raw.githubusercontent caches ~5 min).
 
 ## Failure handling
 
