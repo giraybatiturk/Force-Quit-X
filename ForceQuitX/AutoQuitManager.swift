@@ -64,9 +64,15 @@ class AutoQuitManager {
 
     // MARK: - Idle Check
 
+    /// Pure predicate behind `checkIdleApps()` — extracted so the idle-window math
+    /// can be unit-tested without depending on `NSWorkspace`/`Date()` wall-clock.
+    static func isIdleBeyondTimeout(lastActive: Date, now: Date, timeoutMinutes: Int) -> Bool {
+        let timeout = TimeInterval(timeoutMinutes * 60)
+        return now.timeIntervalSince(lastActive) >= timeout
+    }
+
     private func checkIdleApps() {
         let now = Date()
-        let timeout = TimeInterval(timeoutMinutes * 60)
         let selfBundleID = Bundle.main.bundleIdentifier
         let protectedBundleIDs: Set<String> = ["com.apple.finder"]
 
@@ -87,7 +93,9 @@ class AutoQuitManager {
                 lastActiveTimestamps[bundleID] = now
                 continue
             }
-            if now.timeIntervalSince(lastActive) >= timeout && !app.isTerminated {
+            if Self.isIdleBeyondTimeout(lastActive: lastActive, now: now, timeoutMinutes: timeoutMinutes)
+                && !app.isTerminated
+            {
                 NSLog("ForceQuitX: Auto-quitting idle app: \(app.localizedName ?? bundleID)")
                 app.forceTerminate()
                 lastActiveTimestamps.removeValue(forKey: bundleID)
