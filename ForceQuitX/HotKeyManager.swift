@@ -92,18 +92,40 @@ class HotKeyManager {
         }
     }
 
+    // Safety net: the Carbon handler holds an unretained pointer to self. Teardown
+    // normally happens in applicationWillTerminate, but if this manager is ever
+    // released without an explicit unregister(), the handler would dangle. Idempotent
+    // against the nil-guarded refs.
+    deinit {
+        unregister()
+    }
+
     // MARK: - Update Binding
 
     @discardableResult
     func updateBinding(keyCode: UInt32, modifiers: UInt32) -> Bool {
-        unregister()
+        let previousKeyCode = self.keyCode
+        let previousModifiers = self.modifiers
+
         self.keyCode = keyCode
         self.modifiers = modifiers
-        Preferences.customHotKeyCode = Int(keyCode)
-        Preferences.customHotKeyModifiers = Int(modifiers)
-        let success = register()
-        NotificationCenter.default.post(name: .hotKeyChanged, object: nil)
-        return success
+
+        // Persist only after the new binding actually registers. Otherwise a combo
+        // owned by another app would brick the global shortcut: the broken values
+        // get saved and reload on next launch, unable to ever register again.
+        if register() {
+            Preferences.customHotKeyCode = Int(keyCode)
+            Preferences.customHotKeyModifiers = Int(modifiers)
+            NotificationCenter.default.post(name: .hotKeyChanged, object: nil)
+            return true
+        }
+
+        // Registration failed — roll back to the previously working binding and
+        // leave Preferences untouched. register() tears down first, so this restores.
+        self.keyCode = previousKeyCode
+        self.modifiers = previousModifiers
+        register()
+        return false
     }
 
     static func savedDisplayString() -> String {

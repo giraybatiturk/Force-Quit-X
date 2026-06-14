@@ -53,10 +53,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
             AccessibilityHelper.promptIfNeededOnFirstLaunch()
         }
 
+        // The manager reads its enabled state from Preferences on init.
         autoQuitManager = AutoQuitManager()
-        if Preferences.autoQuitEnabled {
-            autoQuitManager?.isEnabled = true
-        }
 
         // Start Sparkle (scheduled checks run on SUScheduledCheckInterval).
         _ = updaterController
@@ -346,6 +344,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
     // MARK: - Actions: Shortcut
 
     @objc func showKeyRecorder() {
+        // Close any panel already open (e.g. "Change Shortcut..." clicked twice).
+        // Otherwise the prior panel's local event monitor stays installed and keeps
+        // swallowing keystrokes. close() removes the monitor and clears our reference.
+        keyRecorderPanel?.close()
+
         let panel = KeyRecorderPanel(
             currentKeyCode: hotKeyManager?.keyCode ?? UInt32(kVK_ANSI_Q),
             currentModifiers: hotKeyManager?.modifiers ?? UInt32(cmdKey | optionKey)
