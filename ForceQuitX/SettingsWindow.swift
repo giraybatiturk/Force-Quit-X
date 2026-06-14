@@ -74,7 +74,6 @@ struct SettingsWindow: View {
                     Toggle("Auto Quit Idle Apps", isOn: $autoQuitEnabled)
                         .onChange(of: autoQuitEnabled) { _, newValue in
                             Preferences.autoQuitEnabled = newValue
-                            appDelegate?.autoQuitManager?.isEnabled = newValue
                         }
 
                     Picker("Timeout", selection: $timeoutMinutes) {
@@ -86,7 +85,6 @@ struct SettingsWindow: View {
                     }
                     .onChange(of: timeoutMinutes) { _, newValue in
                         Preferences.autoQuitTimeoutMinutes = newValue
-                        appDelegate?.autoQuitManager?.timeoutMinutes = newValue
                     }
                 }
 
@@ -197,7 +195,6 @@ struct SettingsWindow: View {
                 Section {
                     HStack {
                         Button("❤️ Support / Tip") {
-                            // TODO: swap for your real tip page (GitHub Sponsors / Ko-fi).
                             Self.openURL("https://github.com/sponsors/giraybatiturk")
                         }
                         .buttonStyle(.borderedProminent)
@@ -273,8 +270,9 @@ struct SettingsWindow: View {
     }
 
     private func persist(_ ids: [String]) {
+        // Preferences is the single source of truth — the manager reads excluded
+        // IDs live on its next poll, so no need to push state into it here.
         Preferences.autoQuitExcludedBundleIDs = ids
-        appDelegate?.autoQuitManager?.excludedBundleIDs = Set(ids)
         refreshExcluded()
     }
 
@@ -301,6 +299,10 @@ struct SettingsWindow: View {
     }
 
     private func toggleLaunchAtLogin(enabled: Bool) {
+        // The catch below re-syncs `launchAtLogin` from ground truth, which fires
+        // onChange again. Bail early when already in the desired state so that
+        // re-sync can't loop or double-act.
+        guard (SMAppService.mainApp.status == .enabled) != enabled else { return }
         do {
             if enabled {
                 try SMAppService.mainApp.register()
@@ -309,6 +311,10 @@ struct SettingsWindow: View {
             }
         } catch {
             NSLog("Launch at Login failed: \(error.localizedDescription)")
+            // The Toggle already flipped optimistically; surface the failure and
+            // re-sync the switch with the actual service state so it can't lie.
+            NSAlert(error: error).runModal()
+            launchAtLogin = SMAppService.mainApp.status == .enabled
         }
     }
 }
