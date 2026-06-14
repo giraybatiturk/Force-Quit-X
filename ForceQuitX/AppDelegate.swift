@@ -53,10 +53,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
             AccessibilityHelper.promptIfNeededOnFirstLaunch()
         }
 
+        // The manager reads its enabled state from Preferences on init.
         autoQuitManager = AutoQuitManager()
-        if Preferences.autoQuitEnabled {
-            autoQuitManager?.isEnabled = true
-        }
 
         // Start Sparkle (scheduled checks run on SUScheduledCheckInterval).
         _ = updaterController

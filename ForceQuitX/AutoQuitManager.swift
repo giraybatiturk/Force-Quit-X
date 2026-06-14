@@ -4,21 +4,48 @@ class AutoQuitManager {
     private var lastActiveTimestamps: [String: Date] = [:]
     private var pollingTimer: Timer?
     private var workspaceObserver: NSObjectProtocol?
+    private var defaultsObserver: NSObjectProtocol?
 
-    var timeoutMinutes: Int = Preferences.autoQuitTimeoutMinutes
-    var excludedBundleIDs: Set<String> = Set(Preferences.autoQuitExcludedBundleIDs)
-
-    var isEnabled: Bool = false {
-        didSet {
-            if isEnabled {
-                start()
-            } else {
-                stop()
-            }
-        }
-    }
+    // Config is derived live from Preferences — the single source of truth. The
+    // settings layer only writes Preferences; this manager re-reads on each poll
+    // and reacts to enable/disable via the defaults observer below. No mirrored
+    // state to keep in sync, so no "write to two places" bug class.
+    var timeoutMinutes: Int { Preferences.autoQuitTimeoutMinutes }
+    var excludedBundleIDs: Set<String> { Set(Preferences.autoQuitExcludedBundleIDs) }
 
     // MARK: - Lifecycle
+
+    init() {
+        // Reconfigure whenever a preference changes (cheap: just reconciles the
+        // timer with Preferences.autoQuitEnabled). Picks up the initial enabled
+        // state too, so AppDelegate just constructs the manager.
+        defaultsObserver = NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.applyEnabledState()
+        }
+        applyEnabledState()
+    }
+
+    deinit {
+        if let observer = defaultsObserver {
+            NotificationCenter.default.removeObserver(observer)
+            defaultsObserver = nil
+        }
+        stop()
+    }
+
+    /// Reconcile the polling state with `Preferences.autoQuitEnabled`. Idempotent —
+    /// only starts/stops on an actual transition, so repeated calls are harmless.
+    func applyEnabledState() {
+        if Preferences.autoQuitEnabled {
+            if pollingTimer == nil { start() }
+        } else if pollingTimer != nil {
+            stop()
+        }
+    }
 
     func start() {
         // Idempotent: always stop first

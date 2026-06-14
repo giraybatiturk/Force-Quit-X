@@ -74,7 +74,6 @@ struct SettingsWindow: View {
                     Toggle("Auto Quit Idle Apps", isOn: $autoQuitEnabled)
                         .onChange(of: autoQuitEnabled) { _, newValue in
                             Preferences.autoQuitEnabled = newValue
-                            appDelegate?.autoQuitManager?.isEnabled = newValue
                         }
 
                     Picker("Timeout", selection: $timeoutMinutes) {
@@ -86,7 +85,6 @@ struct SettingsWindow: View {
                     }
                     .onChange(of: timeoutMinutes) { _, newValue in
                         Preferences.autoQuitTimeoutMinutes = newValue
-                        appDelegate?.autoQuitManager?.timeoutMinutes = newValue
                     }
                 }
 
@@ -197,7 +195,6 @@ struct SettingsWindow: View {
                 Section {
                     HStack {
                         Button("❤️ Support / Tip") {
-                            // TODO: swap for your real tip page (GitHub Sponsors / Ko-fi).
                             Self.openURL("https://github.com/sponsors/giraybatiturk")
                         }
                         .buttonStyle(.borderedProminent)
@@ -273,8 +270,9 @@ struct SettingsWindow: View {
     }
 
     private func persist(_ ids: [String]) {
+        // Preferences is the single source of truth — the manager reads excluded
+        // IDs live on its next poll, so no need to push state into it here.
         Preferences.autoQuitExcludedBundleIDs = ids
-        appDelegate?.autoQuitManager?.excludedBundleIDs = Set(ids)
         refreshExcluded()
     }
 
