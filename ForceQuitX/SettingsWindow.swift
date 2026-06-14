@@ -301,6 +301,10 @@ struct SettingsWindow: View {
     }
 
     private func toggleLaunchAtLogin(enabled: Bool) {
+        // The catch below re-syncs `launchAtLogin` from ground truth, which fires
+        // onChange again. Bail early when already in the desired state so that
+        // re-sync can't loop or double-act.
+        guard (SMAppService.mainApp.status == .enabled) != enabled else { return }
         do {
             if enabled {
                 try SMAppService.mainApp.register()
@@ -309,6 +313,10 @@ struct SettingsWindow: View {
             }
         } catch {
             NSLog("Launch at Login failed: \(error.localizedDescription)")
+            // The Toggle already flipped optimistically; surface the failure and
+            // re-sync the switch with the actual service state so it can't lie.
+            NSAlert(error: error).runModal()
+            launchAtLogin = SMAppService.mainApp.status == .enabled
         }
     }
 }
