@@ -16,9 +16,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
 
     /// Sparkle auto-updater. Started in `applicationDidFinishLaunching`; the feed
     /// URL, public key, and check cadence come from Info.plist (SUFeedURL,
-    /// SUPublicEDKey, SUScheduledCheckInterval).
+    /// SUPublicEDKey, SUScheduledCheckInterval). `userDriverDelegate` is this
+    /// AppDelegate so scheduled updates surface as a gentle menu-bar badge instead
+    /// of a focus-stealing modal (see the SPUStandardUserDriverDelegate extension).
     private(set) lazy var updaterController = SPUStandardUpdaterController(
-        startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
+        startingUpdater: true, updaterDelegate: nil, userDriverDelegate: self)
+
+    /// A small accent dot pinned to the status item, shown while a scheduled update
+    /// is pending so a background app's update prompt isn't missed.
+    private var updateBadgeView: NSView?
 
     private var settingsWindow: NSWindow?
     private var keyRecorderPanel: KeyRecorderPanel?
@@ -86,6 +92,30 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
         icon?.isTemplate = true
         icon?.accessibilityDescription = "ForceQuitX"
         button.image = icon
+    }
+
+    /// Shows or hides a small accent dot in the status item's top-right corner.
+    /// Kept as a subview overlay so the template icon still adapts to the menu-bar
+    /// appearance while the dot keeps its accent colour.
+    func setUpdateBadgeVisible(_ visible: Bool) {
+        guard let button = statusItem?.button else { return }
+        if updateBadgeView == nil {
+            let dotSize: CGFloat = 6
+            let dot = NSView()
+            dot.wantsLayer = true
+            dot.layer?.backgroundColor = NSColor.controlAccentColor.cgColor
+            dot.layer?.cornerRadius = dotSize / 2
+            dot.translatesAutoresizingMaskIntoConstraints = false
+            button.addSubview(dot)
+            NSLayoutConstraint.activate([
+                dot.widthAnchor.constraint(equalToConstant: dotSize),
+                dot.heightAnchor.constraint(equalToConstant: dotSize),
+                dot.trailingAnchor.constraint(equalTo: button.trailingAnchor, constant: -1),
+                dot.topAnchor.constraint(equalTo: button.topAnchor, constant: 2),
+            ])
+            updateBadgeView = dot
+        }
+        updateBadgeView?.isHidden = !visible
     }
 
     // MARK: - Appearance
@@ -410,5 +440,36 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
 extension AppDelegate: HotKeyDelegate {
     func hotKeyTriggered() {
         quitAllApps()
+    }
+}
+
+// MARK: - SPUStandardUserDriverDelegate (gentle update reminders)
+
+extension AppDelegate: SPUStandardUserDriverDelegate {
+    /// Opt in: tells Sparkle this app provides its own gentle reminder, so a
+    /// scheduled update is presented without forcing its window to the front of a
+    /// menu-bar app the user isn't focused on.
+    var supportsGentleScheduledUpdateReminders: Bool {
+        return true
+    }
+
+    func standardUserDriverWillHandleShowingUpdate(
+        _ handleShowingUpdate: Bool,
+        forUpdate update: SUAppcastItem,
+        state: SPUUserUpdateState
+    ) {
+        // Only nudge for scheduled checks. When the user clicked "Check for
+        // Updates" they're already looking, so no badge is needed.
+        if !state.userInitiated {
+            setUpdateBadgeVisible(true)
+        }
+    }
+
+    func standardUserDriverDidReceiveUserAttention(forUpdate update: SUAppcastItem) {
+        setUpdateBadgeVisible(false)
+    }
+
+    func standardUserDriverWillFinishUpdateSession() {
+        setUpdateBadgeVisible(false)
     }
 }
