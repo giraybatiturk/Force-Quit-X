@@ -23,6 +23,7 @@ skills-lock.json
 # Signing & secrets — never commit
 *.p12
 *.pem
+*.p8
 *-private-key*
 *.privatekey
 *sparkle*private*
