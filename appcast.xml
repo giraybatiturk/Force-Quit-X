@@ -6,6 +6,26 @@
         <description>Most recent changes for ForceQuitX.</description>
         <language>en</language>
 
+        <item>
+            <title>v1.0.1</title>
+            <pubDate>Mon, 15 Jun 2026 07:10:21 +0000</pubDate>
+            <sparkle:version>2</sparkle:version>
+            <sparkle:shortVersionString>1.0.1</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>15.6</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+                <ul>
+                    <li>Custom global shortcut is now safe: if you pick a combination another app already owns, your previous working shortcut is kept instead of being lost.</li>
+                    <li>&ldquo;Launch at Login&rdquo; now reports failures and always reflects the real state.</li>
+                    <li>Fixed a case where reopening the shortcut recorder could swallow keystrokes.</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/giraybatiturk/Force-Quit-X/releases/download/v1.0.1/ForceQuitX-1.0.1.dmg"
+                sparkle:edSignature="8XK4biitWsGQaa2lh7x357A3zMNjJeeEWE3IZUWV+nNn9yUz7iLF9ZrqCmP2UG1BJlCQ+VFc03tqbhppJGNICA=="
+                length="2384560"
+                type="application/octet-stream" />
+        </item>
+
         <!--
         release-cut appends one <item> per release. Template:
 
