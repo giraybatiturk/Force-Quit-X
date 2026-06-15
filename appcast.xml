@@ -7,6 +7,24 @@
         <language>en</language>
 
         <item>
+            <title>v1.0.2</title>
+            <pubDate>Mon, 15 Jun 2026 07:31:28 +0000</pubDate>
+            <sparkle:version>3</sparkle:version>
+            <sparkle:shortVersionString>1.0.2</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>15.6</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+                <ul>
+                    <li>Update notifications are now gentle: a scheduled update shows a small badge on the menu-bar icon instead of a window that can pop up unnoticed behind other apps.</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/giraybatiturk/Force-Quit-X/releases/download/v1.0.2/ForceQuitX-1.0.2.dmg"
+                sparkle:edSignature="kyj6RXCxuuayX0haoA5dV3kbww53BTJBLCVLQjViM3Zkd3X89FTo5GcYr/znB9NjFdt1KR+J6iLXuKTjJ16IBg=="
+                length="2389930"
+                type="application/octet-stream" />
+        </item>
+
+        <item>
             <title>v1.0.1</title>
             <pubDate>Mon, 15 Jun 2026 07:10:21 +0000</pubDate>
             <sparkle:version>2</sparkle:version>
