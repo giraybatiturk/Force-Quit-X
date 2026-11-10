@@ -1,0 +1,65 @@
+<?xml version="1.0" standalone="yes"?>
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+    <channel>
+        <title>ForceQuitX</title>
+        <link>https://raw.githubusercontent.com/giraybatiturk/Force-Quit-X/main/appcast.xml</link>
+        <description>Most recent changes for ForceQuitX.</description>
+        <language>en</language>
+
+        <item>
+            <title>v1.0.2</title>
+            <pubDate>Mon, 15 Jun 2026 07:31:28 +0000</pubDate>
+            <sparkle:version>3</sparkle:version>
+            <sparkle:shortVersionString>1.0.2</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>15.6</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+                <ul>
+                    <li>Update notifications are now gentle: a scheduled update shows a small badge on the menu-bar icon instead of a window that can pop up unnoticed behind other apps.</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/giraybatiturk/Force-Quit-X/releases/download/v1.0.2/ForceQuitX-1.0.2.dmg"
+                sparkle:edSignature="kyj6RXCxuuayX0haoA5dV3kbww53BTJBLCVLQjViM3Zkd3X89FTo5GcYr/znB9NjFdt1KR+J6iLXuKTjJ16IBg=="
+                length="2389930"
+                type="application/octet-stream" />
+        </item>
+
+        <item>
+            <title>v1.0.1</title>
+            <pubDate>Mon, 15 Jun 2026 07:10:21 +0000</pubDate>
+            <sparkle:version>2</sparkle:version>
+            <sparkle:shortVersionString>1.0.1</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>15.6</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+                <ul>
+                    <li>Custom global shortcut is now safe: if you pick a combination another app already owns, your previous working shortcut is kept instead of being lost.</li>
+                    <li>&ldquo;Launch at Login&rdquo; now reports failures and always reflects the real state.</li>
+                    <li>Fixed a case where reopening the shortcut recorder could swallow keystrokes.</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/giraybatiturk/Force-Quit-X/releases/download/v1.0.1/ForceQuitX-1.0.1.dmg"
+                sparkle:edSignature="8XK4biitWsGQaa2lh7x357A3zMNjJeeEWE3IZUWV+nNn9yUz7iLF9ZrqCmP2UG1BJlCQ+VFc03tqbhppJGNICA=="
+                length="2384560"
+                type="application/octet-stream" />
+        </item>
+
+        <!--
+        release-cut appends one <item> per release. Template:
+
+        <item>
+            <title>v1.1.0</title>
+            <pubDate>Wed, 04 Jun 2026 12:00:00 +0000</pubDate>
+            <sparkle:version>2</sparkle:version>                         <!- CFBundleVersion ->
+            <sparkle:shortVersionString>1.1.0</sparkle:shortVersionString> <!- MARKETING_VERSION ->
+            <sparkle:minimumSystemVersion>15.6</sparkle:minimumSystemVersion>
+            <description><![CDATA[ <ul><li>What changed…</li></ul> ]]></description>
+            <enclosure
+                url="https://github.com/giraybatiturk/Force-Quit-X/releases/download/v1.1.0/ForceQuitX-1.1.0.dmg"
+                sparkle:edSignature="SIGNATURE_FROM_sign_update"
+                length="DMG_BYTES_FROM_sign_update"
+                type="application/octet-stream" />
+        </item>
+        -->
+    </channel>
+</rss>
