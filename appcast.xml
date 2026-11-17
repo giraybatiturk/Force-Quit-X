@@ -7,6 +7,18 @@
         <language>en</language>
 
         <item>
+            <title>v1.1.0</title>
+            <sparkle:version>4</sparkle:version>
+            <sparkle:shortVersionString>1.1.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>15.6</sparkle:minimumSystemVersion>
+            <enclosure
+                url="https://github.com/giraybatiturk/Force-Quit-X/releases/download/v1.1.0/ForceQuitX-1.1.0.dmg"
+                sparkle:edSignature="QVkcAjvE345it9KHAI+6cXyg4bVD/5o6Ct33sje33p/cpKOZgIG51aaF7n3sxv7km9VPg89olNa2zeI8Ej4BBQ=="
+                length="2074259"
+                type="application/octet-stream" />
+        </item>
+
+        <item>
             <title>v1.0.2</title>
             <pubDate>Mon, 15 Jun 2026 07:31:28 +0000</pubDate>
             <sparkle:version>3</sparkle:version>
